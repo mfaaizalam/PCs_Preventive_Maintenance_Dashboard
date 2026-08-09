@@ -1,0 +1,122 @@
+LAB MONITORING SYSTEM
+Phase 0 Planning Document — Folder Structure, Database Schema & Development Roadmap
+Prepared for: Department of Industrial & Manufacturing Engineering, NED University
+Reference baseline: uploaded prototype (agent + FastAPI backend + React dashboard)
+Status: Draft for review — confirm before Phase 1 build begins
+1. What This Document Covers
+Before writing any production code, this document lays out how the system will be structured and why, so the whole team is working from the same plan. It covers the new clean folder structure, the PostgreSQL (Neon) database design, the migration strategy, how the existing Excel preventive-maintenance list fits into the system, the baseline UI direction carried over from the prototype, and how the work can be split across three teams (Frontend, Backend, Agent).
+Ground rules confirmed from our discussion, so they're written down and not lost:
+Deployment stays local — the backend and dashboard run on a PC/small server inside the department. There is no plan to publicly host or deploy this to the internet.
+Only the database moves to the cloud — Neon (serverless Postgres) — so 2–3 machines' data stays centrally available, backed up, and reachable without maintaining a local Postgres server.
+Storage stays lean by design — with only a handful of PCs reporting every ~30 seconds, we will not log every single reading forever. The schema below is built around “update the current state, log history only when something meaningful happens.”
+The Excel master list is preserved as data, not thrown away — it becomes the seed data and ongoing checklist module inside the system, not a separate to-do file.
+Alembic is recommended for database version control (see Section 4) — you asked me to evaluate it and include it if it's a good fit; it is, and it's the standard companion to the SQLAlchemy setup already used in the prototype.
+2. New Production Folder Structure
+The prototype (agent / backend / dashboard) is kept as the reference for UI and API shape, but the production project is rebuilt from a clean root with room to grow — Alembic migrations, a proper API versioning layer, service/collector modules for the agent, and a docs/ folder for exactly documents like this one.
+lab-monitoring-system/├── backend/                        # FastAPI + PostgreSQL (Neon)│   ├── app/│   │   ├── main.py                 # app factory, router registration│   │   ├── core/│   │   │   ├── config.py           # settings (.env driven)│   │   │   └── security.py         # API key + JWT auth│   │   ├── api/v1/│   │   │   ├── computers.py        # ingest + list + detail│   │   │   ├── hardware.py         # RAM slots / storage / peripherals│   │   │   ├── software_licenses.py│   │   │   ├── maintenance.py      # Excel-derived checklist module│   │   │   ├── alerts.py│   │   │   └── auth.py│   │   ├── models/                 # SQLAlchemy ORM models (one file per domain)│   │   ├── schemas/                # Pydantic request/response models│   │   ├── services/                # alerting.py, license_check.py, scheduler.py│   │   └── db/│   │       ├── base.py│   │       └── session.py│   ├── alembic/│   │   ├── versions/│   │   └── env.py│   ├── alembic.ini│   ├── requirements.txt│   ├── .env.example│   └── run_server.py│├── agent/                          # Runs on every lab PC (Windows service)│   ├── agent.py                    # scheduler + reporting loop (from prototype)│   ├── collectors/│   │   ├── hardware.py             # wmi: RAM slots, HDD vs SSD, peripherals│   │   ├── software.py             # installed apps, VS Code version│   │   └── licenses.py             # Windows activation, MS Office license│   ├── queue_store.py              # offline SQLite queue (from prototype)│   ├── config/lab_agent_config.json│   ├── installer/│   │   ├── build_exe.spec          # PyInstaller packaging│   │   └── install_service.bat     # Task Scheduler / Windows service setup│   └── requirements.txt│├── dashboard/                      # React (UI/UX baseline from prototype)│   ├── src/│   │   ├── pages/                  # Overview, Computers, Alerts, Licenses, Maintenance│   │   ├── components/             # ComputerCard, Bar, Badges, ComputerDetail, etc.│   │   ├── api/client.js│   │   ├── hooks/│   │   └── styles/│   ├── package.json│   └── vite.config.js│├── docs/                           # this document, ERD, API reference│   ├── planning/│   ├── database-schema.md│   └── ui-reference/│├── scripts/                        # dev/deploy helper scripts├── .gitignore└── README.md
+This is a monorepo (all three teams commit to the same repository, in their own top-level folder) so that shared contracts — the Pydantic schemas the backend exposes — stay a single source of truth for both the agent and the dashboard.
+3. Database Design — PostgreSQL on Neon
+3.1 Core Design Principle: Live State vs. History
+The prototype already uses a good pattern worth keeping: one row per computer that is UPDATED (not inserted) on every check-in, so the “current status” table never grows. We extend that same idea to the new hardware and license data, and we deliberately do NOT create a new row every 30 seconds for everything — that's what was driving the “millions of rows” concern.
+computers — one row per PC, upserted on every agent report. Always current, always small (one row per lab machine).
+Detail tables (ram_slots, storage_devices, peripherals, software_licenses) — also upserted per PC. A RAM slot's row is only replaced when its contents actually change, not every heartbeat.
+metrics_history — the only table that grows over time, and it's written on a coarser interval (e.g. one point every 5 minutes, or on threshold breach) rather than every 30-second heartbeat, plus a retention job that drops rows older than N days.
+hardware_change_log / alerts — append-only, but only written when something actually changes or crosses a threshold — not on a timer.
+Rough volume check for peace of mind: even storing every 30-second reading for 3 PCs would be about 8,600 rows/day — nowhere near “millions,” and Neon's free/low tier handles that easily. But the pattern above keeps it smaller still and keeps queries fast as the lab count grows later.
+3.2 Proposed Tables
+Table
+Purpose
+Growth pattern
+computers
+Current snapshot per PC: hostname, IP, OS, location, CPU/RAM/disk %, uptime, status, last_seen
+Upsert — 1 row per PC
+ram_slots
+Per-slot detail: slot no., capacity, manufacturer, speed
+Upsert per (PC, slot)
+storage_devices
+HDD vs SSD breakdown: type, capacity, model, health
+Upsert per (PC, device)
+peripherals
+Mouse / keyboard / printer presence + status
+Upsert per (PC, device)
+software_licenses
+Windows activation, MS Office, VS Code: status, version, expiry
+Upsert per (PC, product)
+metrics_history
+Time-series CPU/RAM/disk points for trend charts
+Append, coarse interval + retention
+hardware_change_log
+Audit trail: what changed, old → new, when
+Append, only on change
+alerts
+Performance / security / license / hardware alerts, with acknowledge flag
+Append, only on threshold trigger
+maintenance_assets
+PC inventory from the Excel master list: PC no., lab section, specification
+Seeded once, edited occasionally
+maintenance_tasks
+Task catalog: “Clean keyboard & mouse”, “Check boot-up”, frequency
+Seeded once
+maintenance_log
+Which asset / task / period was completed, by whom
+Append, low volume (biweekly ticks)
+users
+Dashboard login accounts + role (admin / lab staff / viewer)
+Small, static
+Every table above already maps onto the prototype's existing `computers`, `metrics`, `software`, and `alerts` tables from backend/app/models.py — we're extending that base rather than discarding it.
+4. Migrations — Alembic (Recommended)
+You asked for my view on using Alembic for database version control — yes, it's the right call here, for a simple reason: the backend already uses SQLAlchemy, and Alembic is its official migration companion. It lets the team change the schema (add a column, add a table) as a tracked, reviewable, reversible script instead of hand-editing the Neon database.
+Every schema change becomes a numbered, committed file in alembic/versions/ — visible in Git, reviewable like code.
+The same migration applies cleanly to a developer's local Postgres and to the shared Neon database — no “works on my machine” schema drift.
+Changes can be rolled back (alembic downgrade) if a change turns out to be wrong.
+cd backendpip install alembicalembic init alembic# edit alembic/env.py to import Base from app.db.base and read DATABASE_URL from settingsalembic revision --autogenerate -m "initial schema"alembic upgrade head
+5. Neon Cloud + Local Deployment — How It Fits Together
+Backend (FastAPI) and Dashboard (React) run locally inside the department — on the IT Manager's PC or a small always-on machine on the local network. No public hosting is planned.
+Only DATABASE_URL in backend/.env points to Neon — the backend talks to Neon over the internet for storage, but the app itself is only reachable on the local network.
+Agents on each lab PC call the local backend's IP (e.g. http://192.168.x.x:8000), same as the prototype does with --server.
+Benefit: no local Postgres server to install/back up/maintain, automatic backups on Neon's side, and the data is durable even if the local backend PC is reformatted.
+6. Excel Master List → Digital Maintenance Module
+The uploaded “Master List — Computer's Schedule Preventive Maintenance” (NED University, IMD) already contains exactly the seed data the maintenance_assets / maintenance_tasks tables need: 46 machines across CAED, CAD/CAM, and Office/Conference/Classroom sections, each with a processor/RAM/disk specification and a biweekly task checklist (clean keyboard & mouse, check boot-up, empty recycle bin, etc.) tracked by week across five two-month cycles.
+Excel column
+Maps to
+S.No / PC NO. / lab section header (e.g. “CAED PCS”)
+maintenance_assets: id, pc_no, lab_section
+SPECIFICATION (Processor / Memory / Hard disk)
+maintenance_assets.specification (and cross-referenced with live hardware data once the agent reports it)
+Tasks (Clean keyboard & mouse, Check boot-up …)
+maintenance_tasks: name, default frequency (biweekly)
+Responsible Person
+maintenance_log.responsible_person / maintenance_assets.default_owner
+W1–W4 checkboxes per month
+maintenance_log: one row written only when a box is actually ticked in the dashboard — not one row per week per PC upfront
+This keeps the digital version true to how the lab already works (a lightweight checklist, ticked biweekly) while making it queryable — e.g. “which PCs are overdue on cleaning this month” — instead of a static spreadsheet.
+7. UI Reference — Baseline Carried Over From the Prototype
+The dashboard's visual language (dark theme, status-colored cards, CPU/RAM/Disk bars, badge row for warnings) is kept exactly as the prototype defines it in dashboard/src/App.jsx and index.css. The mockup below shows that same card layout with the new badges this phase adds — RAM/storage detail and license status — so the direction is clear before the Frontend team starts building.
+Fig. 1 — Computers view, baseline layout + new hardware/license badges (illustrative, built from the prototype's own component structure)
+Kept from prototype: status dot colors (green/amber/red/grey), CPU/MEM/DISK bar pattern, card-per-PC grid, badge row for warnings.
+New in this phase: RAM/storage badges (e.g. “2x8GB RAM”, “SSD 256GB”), license badges (e.g. “Win not act.”, “Office exp 12d”), and a new Maintenance page mirroring the Excel checklist.
+8. Team Split — 3 Teams Working in Parallel
+All three teams build against the shared Pydantic schemas defined in backend/app/schemas/ (the API contract) so nobody blocks on anybody else once Phase 1 (below) is confirmed.
+Team
+Owns
+Key deliverables
+Backend Team
+backend/ + Neon database + Alembic
+Schema & migrations, auth (API key for agents, JWT/login for dashboard users), ingest + read APIs, alert engine, license-expiry prediction logic, maintenance APIs
+Agent Team
+agent/
+wmi/psutil/pywin32 collectors for RAM slots, HDD vs SSD, peripherals, Windows activation, MS Office license, VS Code version; offline queue; packaging as a Windows service/.exe
+Frontend Team
+dashboard/
+React pages (Overview, Computers, Alerts, Software/Licenses, Maintenance), reusing the prototype's card/bar/badge components, wired to the backend APIs
+9. Step-by-Step Roadmap
+Matches the working style you asked for — one module confirmed and working before the next begins.
+Phase 1 (this document) — Folder structure + database schema + Alembic setup. → confirm before continuing.
+Phase 2 — Backend core: auth, computers ingest/list/detail APIs, Neon connection wired up.
+Phase 3 — Agent core: hardware & peripheral collectors (RAM slots, HDD/SSD), reporting to the Phase-2 API.
+Phase 4 — Dashboard core: Overview + Computers views consuming the live API.
+Phase 5 — Software & license monitoring: collector + APIs + Licenses page + expiry alerts.
+Phase 6 — Maintenance module: Excel data import into maintenance_assets/tasks + checklist UI.
+Phase 7 — Alerts polish, predictive expiry notifications, agent packaging (.exe + auto-start), deployment on the 2–3 lab PCs.
+10. Next Step
+Please review Sections 2–6 (folder structure and database schema) — once you confirm this plan, Phase 1 build starts: creating the actual repo structure, the SQLAlchemy models, and the first Alembic migration against your Neon database.

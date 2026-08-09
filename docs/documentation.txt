@@ -1,0 +1,248 @@
+LAB INFRASTRUCTURE
+PREVENTIVE MONITORING & ASSET MANAGEMENT SYSTEM
+System Requirements, Architecture & Design Documentation
+Scope: 60 Endpoints – Centralized LAN Monitoring Server
+Document Version: 1.0
+Classification: Internal – Confidential
+Prepared: August 2026
+1. Executive Summary
+This document defines the requirements, architecture, and implementation plan for a centralized Preventive Monitoring and Asset Management System covering 60 lab PCs connected via LAN to a central management server. The system is designed for non-technical operators and provides a single dashboard from which every PC's hardware, peripherals, software, and license status can be tracked, with proactive alerts raised before failures or license lapses occur.
+The system has two core pillars:
+Hardware Asset & Health Monitoring – tracks every PC and every peripheral (mouse, keyboard, USB device, monitor, etc.) by unique ID, links peripherals to the PC they are connected to, and continuously monitors health metrics (CPU/RAM/disk/temperature) to predict and prevent failures.
+Software Asset & License Monitoring – tracks installed software per PC and monitors license expiry dates, issuing advance alerts so licenses are renewed before they lapse.
+Both pillars feed a single, simple, click-through dashboard: an overview grid of all 60 PCs → click a PC → choose Hardware or Software → drill into details. The design goal throughout is safety and non-intrusiveness: the monitoring agent must never destabilize, slow down, or crash a lab PC.
+2. Objectives & Success Criteria
+Real-time visibility of all 60 PCs and their attached peripherals from one central dashboard.
+Unique-ID based tracking so any mouse/keyboard/USB drive can be traced to the exact PC and port it is/was connected to, with historical logs (useful for loss/theft investigation and inventory audits).
+Early-warning health monitoring (CPU, RAM, disk, temperature, disk SMART status, fan/battery where applicable) with configurable thresholds and alerts before failure.
+Automatic software inventory per PC, with license expiry tracking and advance-notice alerts (e.g., 30/14/7/1 days before expiry).
+A dashboard usable by non-technical lab staff — color-coded status (Green/Amber/Red), plain-language labels, no command-line interaction required.
+Zero to negligible performance impact on monitored PCs; the agent must be lightweight, throttled, and fail-safe.
+Strong security: encrypted communication, access control, audit logging, and safeguards against the monitoring system itself becoming an attack vector (this is important since it will have elevated visibility into 60 machines).
+3. System Architecture
+3.1 High-Level Design
+A lightweight agent-server model is recommended over purely agentless polling, because agentless (WMI/SSH-only) polling at scale on a LAN of 60 heterogeneous PCs tends to be slower, less reliable for peripheral-level (USB) detection, and more fragile when PCs sleep or are briefly offline.
+Layer
+Component
+Responsibility
+Endpoint (x60)
+Monitoring Agent (lightweight service)
+Collects hardware IDs, health metrics, installed software list, USB/peripheral connect-disconnect events. Runs as a low-priority background service.
+Network
+LAN (existing)
+Transport between agents and central server. TLS-encrypted, agent-initiated (no inbound ports opened on lab PCs).
+Central Server
+Ingestion API
+Receives agent reports, validates, writes to database, triggers alert engine.
+Central Server
+Database
+Stores PC inventory, peripheral inventory, health history, software/license inventory, alerts, audit logs.
+Central Server
+Alert Engine
+Evaluates thresholds/expiry dates, generates notifications (dashboard, email, optional SMS).
+Central Server
+Web Dashboard
+Non-technical-friendly UI: PC grid → PC detail → Hardware/Software drill-down.
+Central Server
+Auth & Access Control
+Role-based login for lab staff, admins, auditors.
+3.2 Data Flow (Simplified)
+Agent on each PC collects data on a schedule (e.g., every 5 minutes for health, every 60 minutes for software inventory, immediately on USB connect/disconnect).
+Agent sends a compact JSON payload over HTTPS to the central Ingestion API, authenticated with a per-PC certificate/token.
+Server validates and stores the data, compares against thresholds/expected baselines.
+If a threshold is breached (e.g., temperature high, disk almost full, license expiring in 7 days), the Alert Engine creates an alert visible on the dashboard and optionally emails the responsible staff.
+Dashboard queries the database (not the PCs directly) so viewing the dashboard never touches the lab machines.
+3.3 Why Agent-Initiated, Outbound-Only Communication
+Each agent should only push data outward to the server; the server should never need to open a direct inbound connection to a lab PC for routine monitoring. This avoids opening listening ports on 60 endpoints (a meaningful attack-surface reduction) and works cleanly through standard LAN firewall rules with a single allow-rule (endpoints → server, port 443).
+4. Hardware Tracking Module
+4.1 PC Identification
+Each of the 60 PCs is assigned a permanent, human-readable Asset ID (e.g., LAB-PC-001 – LAB-PC-060) at onboarding, mapped internally to the machine's hardware UUID (motherboard/BIOS UUID) so the identity survives OS reinstalls and hostname changes.
+4.2 Peripheral Identification
+Every peripheral is identified by its hardware-reported identifiers, captured automatically by the agent — no manual data entry required for detection, though friendly labels can be added by staff:
+Device Type
+Identifier(s) Captured
+Notes
+Mouse / Keyboard (USB)
+VID/PID + USB Serial Number (if present) + Port path
+Not all low-cost peripherals expose a serial number; port-path + VID/PID is used as fallback identity.
+USB Storage / Flash Drives
+VID/PID, Serial Number, Volume Label, Capacity
+Enables tracking of removable-media use — relevant for data-loss prevention.
+Monitors
+EDID Serial Number, Model
+Detected via display driver / EDID data.
+Internal components
+Disk Serial (S.M.A.R.T.), RAM module serials (where BIOS exposes them), CPU ID
+Used for health monitoring and warranty/replacement tracking.
+Other USB peripherals
+VID/PID + descriptor string
+Webcams, headsets, printers, docking stations, etc.
+4.3 Peripheral-to-PC Binding & History
+Every connect/disconnect event is logged with timestamp, PC ID, device ID, and USB port.
+The dashboard shows “currently connected” peripherals per PC, and a searchable history (“which PC was this mouse last seen on?”).
+An expected-inventory baseline can be set per PC (e.g., “LAB-PC-014 should have 1 mouse, 1 keyboard”); a mismatch (missing or unexpected device) raises a low-priority alert — useful for spotting missing peripherals or unauthorized USB drives.
+4.4 PC Health Metrics
+Metric
+Purpose
+Suggested Alert Trigger
+CPU utilization & temperature
+Detect cooling failures, runaway processes
+Sustained temp above manufacturer safe limit; sustained 100% CPU
+RAM usage
+Detect memory pressure / leaks
+Sustained usage > 90% for 15+ minutes
+Disk free space
+Prevent disk-full failures
+< 10% free space
+Disk health (S.M.A.R.T.)
+Predict drive failure before data loss
+Any “pre-fail” SMART attribute or reallocated sector growth
+System uptime / unexpected reboots
+Detect crashes/instability
+Unplanned reboot detected
+Fan speed / thermal throttling flag (where exposed)
+Early cooling-failure warning
+Throttling event detected
+Battery health (for laptops, if any)
+Predict battery replacement need
+Health < 60% of design capacity
+Network connectivity / agent heartbeat
+Detect offline or unreachable PCs
+No heartbeat for > 10 minutes
+All thresholds above should be configurable by the administrator per-PC or globally, since lab PCs may have different specs and “normal” ranges.
+5. Software Tracking & License Monitoring Module
+5.1 Installed Software Inventory
+Agent enumerates installed applications (name, publisher, version, install date) on a scheduled basis (e.g., hourly) and reports changes (new installs/uninstalls) as events.
+Supports flagging “unauthorized” software against an admin-defined allow-list, useful for lab compliance.
+5.2 License Expiry Tracking
+For licensed software (OS, antivirus, CAD/engineering tools, specialized lab software, etc.), the system should maintain a license record independent of what the software itself reports, since not all applications expose expiry dates programmatically:
+Field
+Description
+Software Name / Version
+What is licensed
+License Type
+Perpetual, subscription, seat-based, trial
+Assigned PC(s)
+Which of the 60 PCs use this license
+Expiry Date
+Renewal or expiry deadline
+Vendor / Renewal Contact
+Who to contact to renew
+Alert Schedule
+e.g., 30 / 14 / 7 / 1 days before expiry
+Status
+Active / Expiring Soon / Expired / Renewed
+Where possible, the agent cross-checks license files, registry entries, or vendor-specific license API/CLI output to auto-detect expiry dates and reduce manual data entry; where not possible, expiry dates are entered once by the admin and the system handles all subsequent alerting automatically.
+5.3 Alerts
+Dashboard banner + dedicated “Alerts” panel showing all upcoming expiries sorted by urgency.
+Optional email notification to a designated IT/admin distribution list.
+Color coding: Green (> 30 days), Amber (≤ 30 days), Red (≤ 7 days or expired).
+6. Dashboard Design (Non-Technical Users)
+6.1 Navigation Flow
+The dashboard follows a simple three-level drill-down so lab staff never need training beyond “click the tile”:
+Level 1 – Overview Grid: All 60 PCs shown as tiles/cards labeled by Asset ID, each with a single overall status color (Green = healthy, Amber = attention needed, Red = critical) combining both hardware and software/license status.
+Level 2 – PC Summary: Clicking a tile opens a simple summary page for that PC with two large buttons: “Hardware” and “Software”, plus a one-line plain-English status (e.g., “All normal”, “Disk space low”, “Antivirus license expires in 5 days”).
+Level 3 – Detail View: Hardware detail shows connected peripherals, health graphs, and history. Software detail shows installed applications and license status with expiry countdowns.
+6.2 Usability Principles
+Color + icon + plain text together (never rely on color alone — also aids colorblind accessibility).
+No jargon on the main views (e.g., say “Storage almost full” rather than “Disk utilization > 90%”); a technical “advanced view” can be tucked behind an “Advanced details” toggle for IT staff.
+Search/filter bar (“show only PCs with alerts”, search by Asset ID).
+A single “Export report” button (PDF/Excel) for management reporting without needing to understand the live dashboard.
+Mobile-responsive so a lab supervisor can check status from a phone/tablet.
+6.3 Suggested Dashboard Layout
+Zone
+Content
+Top bar
+Total PCs, count Green/Amber/Red, active alert count, last-refresh time
+Main grid
+60 tiles, sortable/filterable by status, room/zone, or Asset ID
+Side panel
+Live alert feed (most recent first)
+Footer
+Export report, Settings (admin only), Help
+7. Security & Sensitivity Considerations
+Because this system has visibility into every PC in the lab and controls alerting for critical infrastructure, it must itself be treated as a sensitive, high-privilege system and protected accordingly.
+7.1 Data-in-Transit & Data-at-Rest
+All agent-to-server traffic over TLS 1.2+; server should present a certificate issued by an internal CA (or the agent should pin the server certificate) to prevent spoofed servers on the LAN.
+Database encryption at rest for the inventory/health/license database, especially since USB serials and software inventories can reveal sensitive operational detail.
+Agents authenticate to the server using a unique per-PC credential (certificate or rotating token) issued at enrollment — never a shared static password across all 60 endpoints.
+7.2 Access Control
+Role-based access: Viewer (lab staff, read-only dashboard), Operator (can acknowledge alerts, edit friendly labels), Administrator (can change thresholds, manage licenses, manage users).
+All administrative actions (threshold changes, license edits, user management) written to an immutable audit log with user, timestamp, and change made.
+Central server should sit on a management VLAN/segment if the network supports it, separate from general lab traffic.
+7.3 Agent Safety — “Must Never Impact the PCs”
+This was explicitly flagged as a concern and is addressed as a first-class design requirement, not an afterthought:
+The agent runs as a low-priority, resource-capped background service (CPU and memory ceilings enforced by the OS scheduler/service manager).
+All data collection is read-only against the OS (no writes to user files, no changes to system configuration) except for the agent's own small local cache/log.
+Polling intervals are deliberately conservative (health every few minutes, not every second) to keep overhead negligible; USB connect/disconnect events are event-driven (no polling needed).
+The agent must fail silently and safely: if the server is unreachable, the agent queues data locally and retries with backoff — it must never block, hang, or crash the host PC, and must never attempt to “fix” anything automatically (monitoring only, not remote control, unless a future phase explicitly adds an approved remote-action feature with its own safeguards).
+Recommend piloting the agent on 3–5 PCs for 1–2 weeks before full 60-PC rollout, specifically watching for any measurable performance impact.
+An easy uninstall/kill-switch should exist for lab IT in case any PC needs the agent removed quickly.
+7.4 Privacy & Governance
+Since USB device tracking can technically reveal user behavior (e.g., what removable media someone used and when), define and communicate a clear, documented policy: this system is for asset and security monitoring, not general staff surveillance, and access to detailed history logs should be limited to Administrators/Auditors.
+Data retention policy: define how long detailed history (e.g., USB connect logs) is kept versus summarized/aggregated (e.g., 12 months detailed, then archived).
+Regular access reviews — periodically confirm who has Administrator rights to the dashboard and rotate/revoke credentials for staff who change roles.
+8. Suggested Technology Stack
+The following is a suggested, not mandatory, stack — chosen for reliability at a 60-endpoint scale, strong Windows-hardware-API support (most labs run Windows), and straightforward in-house maintenance.
+Layer
+Suggested Technology
+Reasoning
+Agent
+C# (.NET) Windows Service, or Python packaged as a service
+.NET has first-class access to WMI/CIM for hardware, USB, SMART and software inventory data on Windows; Python is a solid alternative if cross-platform (Linux) endpoints exist.
+Transport
+HTTPS (TLS) + JSON, optionally MQTT over TLS for lighter/more real-time telemetry
+Simple, firewall-friendly, well understood by non-specialist maintainers.
+Backend API
+Node.js (Express/Fastify) or Python (FastAPI)
+Fast to develop, easy to secure, large ecosystem for auth and validation.
+Database
+PostgreSQL
+Reliable, supports time-series-style history tables well, strong at this scale (60 PCs is small data volume).
+Time-series/metrics (optional, if scaling further)
+TimescaleDB extension or InfluxDB
+Only needed if health-metric granularity/volume grows significantly; Postgres alone is sufficient at 60 PCs.
+Dashboard frontend
+React (with a component library like MUI) or a low-code dashboard tool
+Enables the clean, tile-based, drill-down UI described in Section 6.
+Alerting
+Built-in dashboard alerts + SMTP email; optional Slack/Teams webhook
+Matches typical lab IT communication channels.
+Hosting
+On-premises server/VM on the lab LAN (recommended for a sensitive, air-gapped-preferred deployment)
+Keeps all data inside the lab network, avoids external cloud exposure for sensitive asset data.
+9. Additional Recommendations & Enhancements
+9.1 High-Value Additions
+Automated weekly/monthly PDF report emailed to lab management summarizing fleet health, open alerts, and upcoming license renewals — useful for non-technical stakeholders who won't log into the dashboard.
+QR-code / barcode asset tags on each physical PC mapping to its Asset ID, so staff can scan-to-view status on the dashboard directly from the machine.
+Predictive maintenance scoring: a simple “health score” (0–100) per PC derived from trend analysis (e.g., disk free space trending down, temperature trending up) rather than only static thresholds — gives earlier warning than single-point alerts.
+Change-tracking / configuration drift detection: alert if a PC's installed software list or hardware inventory changes outside of a maintenance window.
+Integration hooks (optional, later phase) with a ticketing system so a Red alert can auto-create a maintenance ticket.
+Scheduled maintenance mode per PC (suppresses alerts during planned reboots/updates so real issues aren't lost in noise).
+9.2 Rollout Plan
+Phase 1 – Pilot: Deploy agent + dashboard on 3–5 PCs, validate zero performance impact, refine thresholds.
+Phase 2 – Core Rollout: Deploy to all 60 PCs; onboard Asset IDs; populate initial software/license inventory (auto-detected plus manual entry for licenses that can't be auto-read).
+Phase 3 – Alerting & Reporting: Enable email alerts, scheduled reports, and train lab staff on the dashboard (a 15–20 minute walkthrough should suffice given the simple 3-level design).
+Phase 4 – Hardening & Review: Security review of access control and audit logs, retention policy sign-off, and a documented incident/runbook process for Red alerts.
+Phase 5 – Optional Enhancements: Predictive health scoring, QR asset tags, ticketing integration, as capacity allows.
+10. Risk Summary
+Risk
+Mitigation
+Agent negatively impacts PC performance
+Resource-capped, low-priority service; conservative polling intervals; piloted before full rollout (Section 7.3)
+Central server becomes single point of failure
+Regular database backups; consider a standby/replica server for a lab this size if uptime is critical
+Unauthorized access to sensitive asset/usage data
+Role-based access control, TLS, encryption at rest, audit logging (Section 7)
+Alert fatigue (too many false alerts) causing staff to ignore real issues
+Sensible, tunable default thresholds; maintenance-mode suppression; clear color/priority coding
+Incomplete/incorrect license expiry data
+Cross-check auto-detected data where possible; periodic manual audit of license records (e.g., quarterly)
+Privacy/trust concerns among lab users about USB/activity tracking
+Documented usage policy, access restricted to Admin/Audit roles, focus on asset security not individual surveillance (Section 7.4)
+11. Next Steps
+Confirm the operating system(s) in use across the 60 PCs (Windows-only vs mixed) to finalize the agent technology choice.
+Confirm whether the central server will be a dedicated on-premises machine/VM, and its available specs.
+Provide (or approve building) an initial software/license inventory template to seed Section 5.2.
+Approve the rollout plan in Section 9.2 and select the pilot PCs for Phase 1.
+End of document.
