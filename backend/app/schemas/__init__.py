@@ -24,14 +24,16 @@ from app.schemas.installed_software import (
     InstalledSoftwareUpsert,
 )
 from app.schemas.maintenance import (
-    MaintenanceAssetCreate,
-    MaintenanceAssetResponse,
-    MaintenanceAssetUpdate,
     MaintenanceTaskCreate,
     MaintenanceTaskResponse,
     MaintenanceTaskUpdate,
 )
-from app.schemas.maintenance_log import MaintenanceLogCreate, MaintenanceLogResponse
+from app.schemas.maintenance_log import (
+    ComputerMaintenanceView,
+    MaintenanceChecklistItem,
+    MaintenanceLogResponse,
+    MaintenanceLogToggle,
+)
 from app.schemas.metric_history import MetricHistoryCreate, MetricHistoryResponse
 from app.schemas.peripheral import (
     PeripheralCreate,
@@ -65,6 +67,7 @@ __all__ = [
     "AuditLogResponse",
     "ComputerCreate",
     "ComputerIngest",
+    "ComputerMaintenanceView",
     "ComputerResponse",
     "ComputerSummaryResponse",
     "ComputerUpdate",
@@ -75,11 +78,9 @@ __all__ = [
     "InstalledSoftwareResponse",
     "InstalledSoftwareUpdate",
     "InstalledSoftwareUpsert",
-    "MaintenanceAssetCreate",
-    "MaintenanceAssetResponse",
-    "MaintenanceAssetUpdate",
-    "MaintenanceLogCreate",
+    "MaintenanceChecklistItem",
     "MaintenanceLogResponse",
+    "MaintenanceLogToggle",
     "MaintenanceTaskCreate",
     "MaintenanceTaskResponse",
     "MaintenanceTaskUpdate",

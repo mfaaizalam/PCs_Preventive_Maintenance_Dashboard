@@ -84,6 +84,7 @@ class MaintenanceFrequency(str, enum.Enum):
     WEEKLY = "weekly"
     BIWEEKLY = "biweekly"
     MONTHLY = "monthly"
+    HALF_YEARLY = "half_yearly"
     QUARTERLY = "quarterly"
     CUSTOM = "custom"
 

@@ -3,7 +3,6 @@ from app.models.audit_log import AuditLog
 from app.models.computer import Computer
 from app.models.hardware_change_log import HardwareChangeLog
 from app.models.installed_software import InstalledSoftware
-from app.models.maintenance_asset import MaintenanceAsset
 from app.models.maintenance_log import MaintenanceLog
 from app.models.maintenance_task import MaintenanceTask
 from app.models.metric_history import MetricHistory
@@ -20,7 +19,6 @@ __all__ = [
     "Computer",
     "HardwareChangeLog",
     "InstalledSoftware",
-    "MaintenanceAsset",
     "MaintenanceLog",
     "MaintenanceTask",
     "MetricHistory",

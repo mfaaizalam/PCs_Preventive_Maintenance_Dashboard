@@ -11,7 +11,7 @@ from app.models.mixins import TimestampMixin
 if TYPE_CHECKING:
     from app.models.alert import Alert
     from app.models.audit_log import AuditLog
-    from app.models.maintenance_log import MaintenanceLog
+   
 
 
 class User(Base, TimestampMixin):
@@ -44,9 +44,7 @@ class User(Base, TimestampMixin):
         back_populates="acknowledged_by",
         foreign_keys="Alert.acknowledged_by_id",
     )
-    maintenance_logs: Mapped[list["MaintenanceLog"]] = relationship(
-        back_populates="completed_by",
-    )
+
     audit_logs: Mapped[list["AuditLog"]] = relationship(
         back_populates="user",
         passive_deletes=True,

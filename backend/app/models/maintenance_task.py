@@ -26,6 +26,12 @@ class MaintenanceTask(Base, TimestampMixin):
         nullable=False,
     )
 
+    # Default role that owns this task (e.g. "Lab Staff", "IT-Support",
+    # "IT-Manager") - taken straight from the Excel's "Responsible
+    # Person" column. This is just the default; who actually ticked a
+    # given occurrence is recorded per-log in MaintenanceLog.completed_by.
+    responsible_person: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     maintenance_logs: Mapped[list["MaintenanceLog"]] = relationship(

@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from app.models.alert import Alert
     from app.models.hardware_change_log import HardwareChangeLog
     from app.models.installed_software import InstalledSoftware
+    from app.models.maintenance_log import MaintenanceLog
     from app.models.metric_history import MetricHistory
     from app.models.peripheral import Peripheral
     from app.models.peripheral_event import PeripheralEvent
@@ -50,6 +51,17 @@ class Computer(Base, TimestampMixin):
         String(100),
         unique=True,
         nullable=False,
+    )
+
+    # Serial number for the maintenance master list (S.No column in
+    # the Excel). Nullable + admin-assigned - agents never set this,
+    # it's purely for matching the department's existing paper/Excel
+    # numbering, assigned once when a PC is added to the checklist.
+    s_no: Mapped[int | None] = mapped_column(
+        Integer,
+        unique=True,
+        nullable=True,
+        index=True,
     )
 
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
@@ -124,6 +136,10 @@ class Computer(Base, TimestampMixin):
         cascade="all, delete-orphan",
     )
     alerts: Mapped[list["Alert"]] = relationship(
+        back_populates="computer",
+        cascade="all, delete-orphan",
+    )
+    maintenance_logs: Mapped[list["MaintenanceLog"]] = relationship(
         back_populates="computer",
         cascade="all, delete-orphan",
     )
