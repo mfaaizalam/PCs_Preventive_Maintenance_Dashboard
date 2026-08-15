@@ -10,6 +10,7 @@ from app.db.database import engine, SessionLocal
 from app.api.agent import router as agent_router
 from app.services.computer_service import purge_expired_metric_history
 from app.api.maintenance import router as maintenance_router
+from app.api.computers import router as computers_router
 logger = logging.getLogger("app.cleanup")
 
 
@@ -62,6 +63,8 @@ app = FastAPI(
 app.include_router(agent_router)
 # Maintenance route
 app.include_router(maintenance_router)
+# Manual computer add/remove route
+app.include_router(computers_router)
 
 @app.get("/")
 def root():

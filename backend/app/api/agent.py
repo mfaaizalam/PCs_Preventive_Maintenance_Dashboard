@@ -24,8 +24,10 @@ def submit_agent_report(
     first contact, updates it and all related hardware / software /
     peripheral records on every call after that.
     """
-    computer = computer_service.ingest_agent_report(db, payload)
-    return computer
+    try:
+        return computer_service.ingest_agent_report(db, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
 
 
 @router.get(

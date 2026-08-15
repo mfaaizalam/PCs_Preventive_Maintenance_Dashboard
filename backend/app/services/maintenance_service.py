@@ -145,6 +145,86 @@ def get_computer_maintenance_view(
     }
 
 
+def get_maintenance_summary(
+    db: Session,
+    frequency: str,
+    period_label: str,
+) -> dict:
+    """
+    Rolls the per-PC checklist up into one collective view for a
+    frequency + period: overall completion, completion per task, and
+    completion per lab section. Powers the checklist chart rather
+    than the single-PC checklist table.
+    """
+    tasks = list_tasks(db, frequency=frequency)
+    computers = list_computers_for_maintenance(db)
+
+    logs = (
+        db.query(MaintenanceLog)
+        .join(MaintenanceTask, MaintenanceLog.maintenance_task_id == MaintenanceTask.id)
+        .filter(
+            MaintenanceLog.period_label == period_label,
+            MaintenanceTask.default_frequency == frequency,
+            MaintenanceLog.completed.is_(True),
+        )
+        .all()
+    )
+    completed_pairs = {(log.computer_id, log.maintenance_task_id) for log in logs}
+
+    total_tasks = len(tasks)
+    total_computers = len(computers)
+    total_count = total_tasks * total_computers
+    completed_count = sum(
+        1
+        for c in computers
+        for t in tasks
+        if (c.id, t.id) in completed_pairs
+    )
+
+    by_task = []
+    for t in tasks:
+        done = sum(1 for c in computers if (c.id, t.id) in completed_pairs)
+        by_task.append({
+            "task_id": t.id,
+            "task_name": t.name,
+            "completed_count": done,
+            "total_count": total_computers,
+            "percent": round((done / total_computers) * 100, 1) if total_computers else 0.0,
+        })
+
+    sections: dict[str, list[Computer]] = {}
+    for c in computers:
+        sections.setdefault(c.lab_section or "Unassigned", []).append(c)
+
+    by_lab_section = []
+    for section, section_computers in sorted(sections.items()):
+        section_total = len(section_computers) * total_tasks
+        section_done = sum(
+            1
+            for c in section_computers
+            for t in tasks
+            if (c.id, t.id) in completed_pairs
+        )
+        by_lab_section.append({
+            "lab_section": section,
+            "completed_count": section_done,
+            "total_count": section_total,
+            "percent": round((section_done / section_total) * 100, 1) if section_total else 0.0,
+        })
+
+    return {
+        "frequency": frequency,
+        "period_label": period_label,
+        "total_computers": total_computers,
+        "total_tasks": total_tasks,
+        "completed_count": completed_count,
+        "total_count": total_count,
+        "percent": round((completed_count / total_count) * 100, 1) if total_count else 0.0,
+        "by_task": by_task,
+        "by_lab_section": by_lab_section,
+    }
+
+
 def list_computers_for_maintenance(db: Session) -> list[Computer]:
     """All enrolled PCs, ordered the way the master list is ordered."""
     return (

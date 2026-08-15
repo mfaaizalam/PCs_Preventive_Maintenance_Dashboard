@@ -33,6 +33,28 @@ class ComputerCreate(ComputerBase):
     pass
 
 
+class ComputerManualCreate(BaseModel):
+    """
+    Body for manually adding a PC that has no monitoring agent
+    installed (e.g. a new lab machine, or one that will never run
+    the agent). Only hostname is required — everything else can be
+    filled in later. `agent_id` is generated server-side so this
+    can't collide with a real agent's check-in.
+    """
+
+    hostname: str = Field(..., max_length=100)
+    asset_id: str | None = Field(default=None, max_length=50)
+    s_no: int | None = None
+    lab_name: str | None = Field(default=None, max_length=100)
+    lab_section: str | None = Field(default=None, max_length=100)
+    ip_address: str | None = Field(default=None, max_length=45)
+    cpu_model: str | None = Field(default=None, max_length=200)
+    os_name: str | None = Field(default=None, max_length=100)
+    os_version: str | None = Field(default=None, max_length=100)
+    ram_total_gb: float | None = Field(default=None, ge=0)
+    disk_total_gb: float | None = Field(default=None, ge=0)
+
+
 class ComputerUpdate(BaseModel):
     asset_id: str | None = Field(default=None, max_length=50)
     hardware_uuid: str | None = Field(default=None, max_length=100)

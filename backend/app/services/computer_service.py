@@ -3,7 +3,7 @@ Business logic for ingesting agent check-in reports and building
 the dashboard overview. Called by app/api/agent.py.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
@@ -26,8 +26,8 @@ from app.models.software_license import SoftwareLicense
 from app.models.storage_device import StorageDevice
 from app.schemas.agent import AgentReportPayload, DashboardOverviewResponse
 from app.schemas.alert import AlertSummaryResponse
-from app.schemas.computer import ComputerSummaryResponse
-from datetime import datetime, timedelta, timezone   # <- timedelta added
+from app.schemas.computer import ComputerManualCreate, ComputerSummaryResponse
+import uuid
 # ------------------------------------------------------------------
 # THRESHOLDS
 # ------------------------------------------------------------------
@@ -101,6 +101,55 @@ def _compute_status(
     return ComputerStatus.HEALTHY
 
 
+def create_manual_computer(db: Session, payload: ComputerManualCreate) -> Computer:
+    """
+    Adds a PC that doesn't (or doesn't yet) run the monitoring agent
+    — e.g. a brand-new lab machine — so it shows up in Categories and
+    can be enrolled in the maintenance checklist right away. Live
+    specs/usage will read as "unknown" until an agent checks in with
+    this hostname; nothing here talks to the agent ingest pipeline.
+    """
+    if db.query(Computer.id).filter(Computer.hostname == payload.hostname).first():
+        raise ValueError(f"A PC named '{payload.hostname}' already exists")
+
+    if payload.asset_id and db.query(Computer.id).filter(Computer.asset_id == payload.asset_id).first():
+        raise ValueError(f"Asset ID '{payload.asset_id}' is already in use")
+
+    if payload.s_no is not None and db.query(Computer.id).filter(Computer.s_no == payload.s_no).first():
+        raise ValueError(f"S.No {payload.s_no} is already in use")
+
+    computer = Computer(
+        agent_id=f"manual-{uuid.uuid4().hex[:12]}",
+        hostname=payload.hostname,
+        asset_id=payload.asset_id,
+        s_no=payload.s_no,
+        lab_name=payload.lab_name,
+        lab_section=payload.lab_section,
+        ip_address=payload.ip_address,
+        cpu_model=payload.cpu_model,
+        os_name=payload.os_name,
+        os_version=payload.os_version,
+        ram_total_gb=payload.ram_total_gb,
+        disk_total_gb=payload.disk_total_gb,
+        status=ComputerStatus.UNKNOWN,
+        is_online=False,
+    )
+    db.add(computer)
+    db.commit()
+    db.refresh(computer)
+    return computer
+
+
+def delete_computer(db: Session, computer_id: int) -> bool:
+    """Removes a PC (and, via cascade, its maintenance/alert/history rows)."""
+    computer = db.query(Computer).filter(Computer.id == computer_id).first()
+    if not computer:
+        return False
+    db.delete(computer)
+    db.commit()
+    return True
+
+
 def get_computer_by_agent_id(db: Session, agent_id: str) -> Computer | None:
     return db.query(Computer).filter(Computer.agent_id == agent_id).first()
 
@@ -134,6 +183,29 @@ def ingest_agent_report(db: Session, payload: AgentReportPayload) -> Computer:
         )
 
     is_new = computer is None
+
+    # The unique constraint on hostname means two different physical
+    # PCs (different agent_id/hardware_uuid) can't both be named the
+    # same thing. That used to surface as a raw 500 from a bare
+    # IntegrityError deep in db.flush(); catch it here instead with a
+    # message that says which two computer rows actually collide, so
+    # whoever's reading the API response (or server log) can go
+    # rename/remove one of them instead of guessing.
+    conflict = (
+        db.query(Computer)
+        .filter(Computer.hostname == payload.hostname)
+        .filter(Computer.id != computer.id if computer is not None else True)
+        .first()
+    )
+    if conflict:
+        raise ValueError(
+            f"Hostname '{payload.hostname}' is already used by computer id={conflict.id} "
+            f"(agent_id='{conflict.agent_id}'). This report is from agent_id="
+            f"'{payload.agent_id}'"
+            + (f", matched to existing computer id={computer.id}" if computer is not None else "")
+            + ". Rename the PC in Windows, or delete the stale duplicate via "
+            "DELETE /api/computers/{id}, then have the agent report again."
+        )
 
     if is_new:
         computer = Computer(agent_id=payload.agent_id, hostname=payload.hostname)

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.models.enums import MaintenanceFrequency
 from app.schemas.computer import ComputerSummaryResponse
-from app.schemas.maintenance import MaintenanceTaskResponse
+from app.schemas.maintenance import MaintenanceSummaryResponse, MaintenanceTaskResponse
 from app.schemas.maintenance_log import (
     ComputerMaintenanceView,
     MaintenanceLogResponse,
@@ -24,6 +24,19 @@ def get_tasks(
     return maintenance_service.list_tasks(
         db, frequency=frequency.value if frequency else None
     )
+
+
+@router.get("/summary", response_model=MaintenanceSummaryResponse)
+def get_maintenance_summary(
+    frequency: MaintenanceFrequency,
+    period: str = Query(
+        ...,
+        description="'2026-08-W2' (biweekly), '2026-08' (monthly), or '2026-H1' (half-yearly)",
+    ),
+    db: Session = Depends(get_db),
+):
+    """Collective completion across every enrolled PC, for the checklist chart."""
+    return maintenance_service.get_maintenance_summary(db, frequency.value, period)
 
 
 @router.get("/computers", response_model=list[ComputerSummaryResponse])
