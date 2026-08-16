@@ -6,6 +6,7 @@ const SECTIONS = [
     hint: "GET /api/agent/computers/{agent_id}/ram-slots",
     note: "Per-slot capacity, manufacturer, and speed (RamSlot model + RamSlotResponse schema already exist).",
   },
+
   {
     title: "Storage Devices",
     hint: "GET /api/agent/computers/{agent_id}/storage-devices",

@@ -4,9 +4,9 @@ the dashboard overview. Called by app/api/agent.py.
 """
 
 from datetime import datetime, timedelta, timezone
-
+from app.models.storage_device import StorageDevice
 from sqlalchemy.orm import Session
-
+from app.models.ram_slot import RamSlot
 from app.models.alert import Alert
 from app.models.computer import Computer
 from app.models.enums import (
@@ -27,6 +27,7 @@ from app.models.storage_device import StorageDevice
 from app.schemas.agent import AgentReportPayload, DashboardOverviewResponse
 from app.schemas.alert import AlertSummaryResponse
 from app.schemas.computer import ComputerManualCreate, ComputerSummaryResponse
+from app.models.peripheral_event import PeripheralEvent
 import uuid
 # ------------------------------------------------------------------
 # THRESHOLDS
@@ -543,4 +544,121 @@ def get_dashboard_overview(db: Session) -> DashboardOverviewResponse:
         last_refresh_at=datetime.now(timezone.utc),
         computers=[ComputerSummaryResponse.model_validate(c) for c in computers],
         recent_alerts=[AlertSummaryResponse.model_validate(a) for a in recent_alerts],
+    )
+
+def get_ram_slots_by_agent_id(db: Session, agent_id: str) -> list[RamSlot] | None:
+    """
+    Returns the RAM slots for the computer with this agent_id, or
+    None if no computer with that agent_id exists (route turns that
+    into a 404). Empty list means the computer exists but the agent
+    hasn't reported any RAM slot data yet.
+    """
+    computer = get_computer_by_agent_id(db, agent_id)
+    if computer is None:
+        return None
+    return computer.ram_slots
+
+#  Storage Devices
+def get_storage_devices_by_agent_id(db: Session, agent_id: str) -> list[StorageDevice] | None:
+    """
+    Returns the storage devices for the computer with this agent_id,
+    or None if no computer with that agent_id exists (route turns
+    that into a 404). Empty list means the computer exists but the
+    agent hasn't reported any storage device data yet.
+    """
+    computer = get_computer_by_agent_id(db, agent_id)
+    if computer is None:
+        return None
+    return computer.storage_devices
+# Install software
+def get_installed_software_by_agent_id(db: Session, agent_id: str) -> list[InstalledSoftware] | None:
+    """
+    Returns the installed-software inventory for the computer with
+    this agent_id, or None if no computer with that agent_id exists
+    (route turns that into a 404). Empty list means the computer
+    exists but the agent hasn't reported any software inventory yet.
+    """
+    computer = get_computer_by_agent_id(db, agent_id)
+    if computer is None:
+        return None
+    return computer.installed_software
+
+# Software Licenses
+def get_software_licenses_by_agent_id(db: Session, agent_id: str) -> list[SoftwareLicense] | None:
+    """
+    Returns the software licenses for the computer with this
+    agent_id, or None if no computer with that agent_id exists
+    (route turns that into a 404). Empty list means the computer
+    exists but the agent hasn't reported any license data yet.
+    """
+    computer = get_computer_by_agent_id(db, agent_id)
+    if computer is None:
+        return None
+    return computer.software_licenses
+# Get Peripherals
+def get_peripherals_by_agent_id(db: Session, agent_id: str) -> list[Peripheral] | None:
+    """
+    Returns the peripherals for the computer with this agent_id, or
+    None if no computer with that agent_id exists (route turns that
+    into a 404). Empty list means the computer exists but the agent
+    hasn't reported any peripherals yet.
+    """
+    computer = get_computer_by_agent_id(db, agent_id)
+    if computer is None:
+        return None
+    return computer.peripherals
+
+# Peripheral _event
+def get_peripheral_events_by_agent_id(
+    db: Session,
+    agent_id: str,
+    limit: int = 100,
+) -> list[PeripheralEvent] | None:
+    """
+    Returns the peripheral connect/disconnect history for the
+    computer with this agent_id, most recent first, or None if no
+    computer with that agent_id exists (route turns that into a
+    404). Empty list means the computer exists but no peripheral
+    events have been recorded yet. `limit` caps how many rows come
+    back, since this table only grows over time (unlike the
+    snapshot-style tables the other agent-data endpoints read from).
+    """
+    computer = get_computer_by_agent_id(db, agent_id)
+    if computer is None:
+        return None
+
+    return (
+        db.query(PeripheralEvent)
+        .filter(PeripheralEvent.computer_id == computer.id)
+        .order_by(PeripheralEvent.occurred_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+# hardware_change_log
+
+def get_hardware_changes_by_agent_id(
+    db: Session,
+    agent_id: str,
+    limit: int = 100,
+) -> list[HardwareChangeLog] | None:
+    """
+    Returns the hardware/software/peripheral change audit trail for
+    the computer with this agent_id, most recent first, or None if
+    no computer with that agent_id exists (route turns that into a
+    404). Empty list means the computer exists but no changes have
+    been recorded yet. `limit` caps how many rows come back, since
+    this table only grows over time — same reasoning as
+    get_peripheral_events_by_agent_id.
+    """
+    computer = get_computer_by_agent_id(db, agent_id)
+    if computer is None:
+        return None
+
+    return (
+        db.query(HardwareChangeLog)
+        .filter(HardwareChangeLog.computer_id == computer.id)
+        .order_by(HardwareChangeLog.changed_at.desc())
+        .limit(limit)
+        .all()
     )

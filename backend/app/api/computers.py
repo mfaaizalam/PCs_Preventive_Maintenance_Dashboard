@@ -29,3 +29,4 @@ def create_computer(payload: ComputerManualCreate, db: Session = Depends(get_db)
 def remove_computer(computer_id: int, db: Session = Depends(get_db)):
     if not computer_service.delete_computer(db, computer_id):
         raise HTTPException(status_code=404, detail="Computer not found")
+

@@ -23,7 +23,6 @@ export default function PCDetails() {
         <SpecsPanel computer={computer} />
         <PCAlertsSection alerts={alerts} limited={alertsLimited} />
       </div>
-
       <UnexposedSectionsGrid />
     </div>
   );

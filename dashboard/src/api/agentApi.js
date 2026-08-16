@@ -20,3 +20,14 @@ export function fetchComputerByAgentId(agentId, signal) {
     .get(`/api/agent/computers/${encodeURIComponent(agentId)}`, { signal })
     .then((res) => res.data);
 }
+
+/**
+ * GET /api/agent/computers/{agent_id}/ram-slots
+ * Per-slot capacity, manufacturer, and speed. Empty array means the
+ * computer exists but the agent hasn't reported RAM slot data yet.
+ */
+export function fetchRamSlots(agentId, signal) {
+  return client
+    .get(`/api/agent/computers/${encodeURIComponent(agentId)}/ram-slots`, { signal })
+    .then((res) => res.data);
+}
