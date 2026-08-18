@@ -5,7 +5,6 @@ from app.models.hardware_change_log import HardwareChangeLog
 from app.models.installed_software import InstalledSoftware
 from app.models.maintenance_log import MaintenanceLog
 from app.models.maintenance_task import MaintenanceTask
-from app.models.metric_history import MetricHistory
 from app.models.peripheral import Peripheral
 from app.models.peripheral_event import PeripheralEvent
 from app.models.ram_slot import RamSlot
@@ -21,7 +20,6 @@ __all__ = [
     "InstalledSoftware",
     "MaintenanceLog",
     "MaintenanceTask",
-    "MetricHistory",
     "Peripheral",
     "PeripheralEvent",
     "RamSlot",

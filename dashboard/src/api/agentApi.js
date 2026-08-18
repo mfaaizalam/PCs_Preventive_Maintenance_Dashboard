@@ -1,33 +1,65 @@
 import client from "./client";
 
-/**
- * GET /api/agent/dashboard
- * Aggregated overview: counts by status, every computer (summary shape),
- * and the 10 most recent unresolved alerts system-wide.
- */
 export function fetchDashboardOverview(signal) {
   return client.get("/api/agent/dashboard", { signal }).then((res) => res.data);
 }
 
-/**
- * GET /api/agent/computers/{agent_id}
- * Full flat record for one computer. Note: the backend only returns
- * the computer's own columns here — no nested RAM/storage/peripheral/
- * alert/history data is exposed by this endpoint today.
- */
+export function fetchHardwareNotifications(hours = 24, signal) {
+  return client
+    .get("/api/agent/notifications/hardware", { params: { hours }, signal })
+    .then((res) => res.data);
+}
+
 export function fetchComputerByAgentId(agentId, signal) {
   return client
     .get(`/api/agent/computers/${encodeURIComponent(agentId)}`, { signal })
     .then((res) => res.data);
 }
 
-/**
- * GET /api/agent/computers/{agent_id}/ram-slots
- * Per-slot capacity, manufacturer, and speed. Empty array means the
- * computer exists but the agent hasn't reported RAM slot data yet.
- */
 export function fetchRamSlots(agentId, signal) {
   return client
     .get(`/api/agent/computers/${encodeURIComponent(agentId)}/ram-slots`, { signal })
+    .then((res) => res.data);
+}
+
+export function fetchStorageDevices(agentId, signal) {
+  return client
+    .get(`/api/agent/computers/${encodeURIComponent(agentId)}/storage-devices`, { signal })
+    .then((res) => res.data);
+}
+
+export function fetchInstalledSoftware(agentId, signal) {
+  return client
+    .get(`/api/agent/computers/${encodeURIComponent(agentId)}/installed_software`, { signal })
+    .then((res) => res.data);
+}
+
+export function fetchSoftwareLicenses(agentId, signal) {
+  return client
+    .get(`/api/agent/computers/${encodeURIComponent(agentId)}/licenses`, { signal })
+    .then((res) => res.data);
+}
+
+export function fetchPeripherals(agentId, signal) {
+  return client
+    .get(`/api/agent/computers/${encodeURIComponent(agentId)}/peripherals`, { signal })
+    .then((res) => res.data);
+}
+
+export function fetchPeripheralEvents(agentId, limit = 100, signal) {
+  return client
+    .get(`/api/agent/computers/${encodeURIComponent(agentId)}/peripheral-events`, {
+      params: { limit },
+      signal,
+    })
+    .then((res) => res.data);
+}
+
+export function fetchHardwareChanges(agentId, limit = 100, signal) {
+  return client
+    .get(`/api/agent/computers/${encodeURIComponent(agentId)}/hardware-changes`, {
+      params: { limit },
+      signal,
+    })
     .then((res) => res.data);
 }

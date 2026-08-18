@@ -5,8 +5,8 @@ import { fetchComputerByAgentId, fetchDashboardOverview } from "../api/agentApi"
  * Loads GET /api/agent/computers/{agent_id} for the flat computer
  * record, plus GET /api/agent/dashboard so this PC's alerts can be
  * filtered out of the shared recent-alerts feed (there's no per-PC
- * alerts endpoint yet — see NotExposedNotice for the sections that
- * genuinely have no data source at all).
+ * alerts endpoint yet). RAM/storage/software/peripheral/history
+ * sections are loaded separately by useAgentSections.
  */
 export default function usePCDetail(agentId) {
   const [computer, setComputer] = useState(null);

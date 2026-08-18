@@ -3,6 +3,7 @@ Business logic for ingesting agent check-in reports and building
 the dashboard overview. Called by app/api/agent.py.
 """
 
+import re
 from datetime import datetime, timedelta, timezone
 from app.models.storage_device import StorageDevice
 from sqlalchemy.orm import Session
@@ -18,7 +19,6 @@ from app.models.enums import (
 )
 from app.models.hardware_change_log import HardwareChangeLog
 from app.models.installed_software import InstalledSoftware
-from app.models.metric_history import MetricHistory
 from app.models.peripheral import Peripheral
 from app.models.peripheral_event import PeripheralEvent
 from app.models.ram_slot import RamSlot
@@ -26,9 +26,50 @@ from app.models.software_license import SoftwareLicense
 from app.models.storage_device import StorageDevice
 from app.schemas.agent import AgentReportPayload, DashboardOverviewResponse
 from app.schemas.alert import AlertSummaryResponse
-from app.schemas.computer import ComputerManualCreate, ComputerSummaryResponse
+from app.schemas.computer import ComputerSummaryResponse
+from app.schemas.notification import HardwareEventBrief, HardwareNotificationResponse
 from app.models.peripheral_event import PeripheralEvent
-import uuid
+# ------------------------------------------------------------------
+# HARDWARE NOTIFICATION WINDOWS
+# ------------------------------------------------------------------
+
+# How far back a PC card's "recent hardware activity" list looks.
+HARDWARE_ACTIVITY_CARD_DAYS = 3
+# How many events to embed per PC in the dashboard overview payload.
+HARDWARE_ACTIVITY_CARD_LIMIT = 5
+# How far back the bell notification feed looks by default.
+HARDWARE_NOTIFICATION_DEFAULT_HOURS = 24
+
+# device_type -> human label. Falls back to a title-cased version of
+# the raw string (e.g. "usb_storage" -> "Usb Storage") for anything
+# not listed here, so new peripheral types never render blank.
+DEVICE_TYPE_LABELS = {
+    "mouse": "Mouse",
+    "keyboard": "Keyboard",
+    "touchpad": "Touchpad",
+    "monitor": "Monitor",
+    "printer": "Printer",
+    "physical_printer": "Printer",
+    "virtual_printer": "Virtual Printer",
+    "usb_storage": "USB Storage",
+    "webcam": "Webcam",
+    "headset": "Headset",
+    "docking_station": "Docking Station",
+    "other": "Device",
+}
+
+
+def _device_label(device_type: str | None) -> str:
+    if not device_type:
+        return "Device"
+    return DEVICE_TYPE_LABELS.get(device_type.lower(), device_type.replace("_", " ").title())
+
+
+def _hardware_event_message(device_type: str | None, event_type: PeripheralEventType) -> str:
+    label = _device_label(device_type)
+    if event_type == PeripheralEventType.DISCONNECTED:
+        return f"{label} removed"
+    return f"{label} connected"
 # ------------------------------------------------------------------
 # THRESHOLDS
 # ------------------------------------------------------------------
@@ -62,23 +103,71 @@ DIRECT_ASSIGN_FIELDS = [
     "uptime_seconds",
 ]
 
-def purge_expired_metric_history(db: Session, retention_days: int) -> int:
-    """
-    Delete metrics_history rows older than retention_days.
+# ------------------------------------------------------------------
+# AUTO LAB / PC-NUMBER IDENTIFICATION
+# ------------------------------------------------------------------
+# Best-effort parse of "<SECTION>-...-<NUMBER>" out of the hostname
+# the agent reports, e.g.:
+#   "CAED-LAB-14"  -> section="CAED",   number="14"
+#   "CADCAM-05"    -> section="CADCAM", number="05"
+#   "OFFICE-PC-3"  -> section="OFFICE", number="3"
+#   "CAED14"       -> section="CAED",   number="14"
+# Used so a PC is filed under its real lab the moment its agent
+# checks in, instead of relying on someone hand-editing
+# LAB_NAME/LAB_SECTION in agent/config.py or using the manual "Add
+# PC" form (removed in Module 2).
+_HOSTNAME_LAB_PATTERNS = [
+    re.compile(r"^(?P<section>[A-Za-z]+(?:/[A-Za-z]+)*)[-_](?:[A-Za-z]+[-_])?(?P<number>\d{1,4})$"),
+    re.compile(r"^(?P<section>[A-Za-z]+(?:/[A-Za-z]+)*)(?P<number>\d{1,4})$"),
+]
 
-    Called on a timer from main.py, not from the ingest path - keeps
-    the table at a constant rolling-window size (e.g. always the last
-    30 days) instead of growing forever or needing a scheduled wipe.
-    """
-    cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
 
-    deleted = (
-        db.query(MetricHistory)
-        .filter(MetricHistory.recorded_at < cutoff)
-        .delete(synchronize_session=False)
-    )
-    db.commit()
-    return deleted
+def _derive_lab_from_hostname(hostname: str) -> tuple[str | None, str | None]:
+    """
+    Returns (lab_section, pc_number) parsed from the hostname, or
+    (None, None) if the hostname doesn't match a recognizable shape.
+    lab_section is uppercased so "caed-lab-3" and "CAED-LAB-9" group
+    together under the same Category.
+    """
+    if not hostname:
+        return None, None
+    candidate = hostname.strip()
+    for pattern in _HOSTNAME_LAB_PATTERNS:
+        match = pattern.match(candidate)
+        if match:
+            return match.group("section").upper(), match.group("number")
+    return None, None
+
+
+def _apply_auto_lab_identity(db: Session, computer: Computer) -> None:
+    """
+    Fills in lab_section / asset_id (PC number tag) from the hostname
+    when they're still empty, so the PC shows up under its real lab
+    in Categories/Dashboard/Maintenance instead of "Unassigned". Never
+    overwrites a value that's already set (explicit agent config or a
+    prior fill both win).
+    """
+    if computer.lab_section and computer.asset_id:
+        return
+
+    derived_section, derived_number = _derive_lab_from_hostname(computer.hostname)
+
+    if not computer.lab_section and derived_section:
+        computer.lab_section = derived_section
+
+    if not computer.asset_id and derived_number:
+        candidate_asset_id = (
+            f"{derived_section}-{derived_number}" if derived_section else derived_number
+        )
+        clash = (
+            db.query(Computer.id)
+            .filter(Computer.asset_id == candidate_asset_id, Computer.id != computer.id)
+            .first()
+        )
+        if not clash:
+            computer.asset_id = candidate_asset_id
+
+
 def _compute_status(
     cpu: float | None,
     ram: float | None,
@@ -100,45 +189,6 @@ def _compute_status(
         return ComputerStatus.ATTENTION
 
     return ComputerStatus.HEALTHY
-
-
-def create_manual_computer(db: Session, payload: ComputerManualCreate) -> Computer:
-    """
-    Adds a PC that doesn't (or doesn't yet) run the monitoring agent
-    — e.g. a brand-new lab machine — so it shows up in Categories and
-    can be enrolled in the maintenance checklist right away. Live
-    specs/usage will read as "unknown" until an agent checks in with
-    this hostname; nothing here talks to the agent ingest pipeline.
-    """
-    if db.query(Computer.id).filter(Computer.hostname == payload.hostname).first():
-        raise ValueError(f"A PC named '{payload.hostname}' already exists")
-
-    if payload.asset_id and db.query(Computer.id).filter(Computer.asset_id == payload.asset_id).first():
-        raise ValueError(f"Asset ID '{payload.asset_id}' is already in use")
-
-    if payload.s_no is not None and db.query(Computer.id).filter(Computer.s_no == payload.s_no).first():
-        raise ValueError(f"S.No {payload.s_no} is already in use")
-
-    computer = Computer(
-        agent_id=f"manual-{uuid.uuid4().hex[:12]}",
-        hostname=payload.hostname,
-        asset_id=payload.asset_id,
-        s_no=payload.s_no,
-        lab_name=payload.lab_name,
-        lab_section=payload.lab_section,
-        ip_address=payload.ip_address,
-        cpu_model=payload.cpu_model,
-        os_name=payload.os_name,
-        os_version=payload.os_version,
-        ram_total_gb=payload.ram_total_gb,
-        disk_total_gb=payload.disk_total_gb,
-        status=ComputerStatus.UNKNOWN,
-        is_online=False,
-    )
-    db.add(computer)
-    db.commit()
-    db.refresh(computer)
-    return computer
 
 
 def delete_computer(db: Session, computer_id: int) -> bool:
@@ -248,6 +298,9 @@ def ingest_agent_report(db: Session, payload: AgentReportPayload) -> Computer:
     # flush so computer.id exists for child rows / logs below
     db.flush()
 
+    # ---- auto-identify lab section + PC number from hostname ----
+    _apply_auto_lab_identity(db, computer)
+
     for field, change_type, old_value, new_value in changes:
         db.add(
             HardwareChangeLog(
@@ -266,7 +319,6 @@ def ingest_agent_report(db: Session, payload: AgentReportPayload) -> Computer:
     _record_peripheral_events(db, computer, payload.peripheral_events)
     _upsert_software_licenses(db, computer, payload.software_licenses)
     _upsert_installed_software(db, computer, payload.installed_software)
-    _record_metric_history(db, computer, payload)
     _generate_threshold_alert(db, computer)
 
     db.commit()
@@ -437,34 +489,6 @@ def _upsert_installed_software(db: Session, computer: Computer, items) -> None:
             db.add(InstalledSoftware(computer_id=computer.id, **data))
 
 
-def _record_metric_history(db: Session, computer: Computer, payload: AgentReportPayload) -> None:
-    metrics = payload.metrics
-    db.add(
-        MetricHistory(
-            computer_id=computer.id,
-            cpu_usage_percent=(
-                metrics.cpu_usage_percent if metrics else payload.cpu_usage_percent
-            ),
-            ram_usage_percent=(
-                metrics.ram_usage_percent if metrics else payload.ram_usage_percent
-            ),
-            disk_usage_percent=(
-                metrics.disk_usage_percent if metrics else payload.disk_usage_percent
-            ),
-            cpu_temperature_celsius=(
-                metrics.cpu_temperature_celsius
-                if metrics
-                else payload.cpu_temperature_celsius
-            ),
-            recorded_at=(
-                (metrics.recorded_at if metrics else None)
-                or payload.reported_at
-                or datetime.now(timezone.utc)
-            ),
-        )
-    )
-
-
 def _generate_threshold_alert(db: Session, computer: Computer) -> None:
     if computer.status not in (ComputerStatus.CRITICAL, ComputerStatus.ATTENTION):
         return
@@ -512,6 +536,49 @@ def _generate_threshold_alert(db: Session, computer: Computer) -> None:
 # DASHBOARD
 # ------------------------------------------------------------------
 
+def _recent_hardware_events_by_computer(
+    db: Session,
+    computer_ids: list[int],
+    days: int = HARDWARE_ACTIVITY_CARD_DAYS,
+    per_computer_limit: int = HARDWARE_ACTIVITY_CARD_LIMIT,
+) -> dict[int, list[HardwareEventBrief]]:
+    """
+    One bulk query for every computer's recent peripheral connect/
+    disconnect activity (instead of one request per PC card). Returns
+    at most `per_computer_limit` most-recent events per computer,
+    newest first, from the last `days` days.
+    """
+    if not computer_ids:
+        return {}
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+    rows = (
+        db.query(PeripheralEvent)
+        .filter(
+            PeripheralEvent.computer_id.in_(computer_ids),
+            PeripheralEvent.occurred_at >= cutoff,
+        )
+        .order_by(PeripheralEvent.occurred_at.desc())
+        .all()
+    )
+
+    grouped: dict[int, list[HardwareEventBrief]] = {}
+    for row in rows:
+        bucket = grouped.setdefault(row.computer_id, [])
+        if len(bucket) >= per_computer_limit:
+            continue
+        bucket.append(
+            HardwareEventBrief(
+                event_type=row.event_type,
+                device_type=row.device_type,
+                message=_hardware_event_message(row.device_type, row.event_type),
+                occurred_at=row.occurred_at,
+            )
+        )
+    return grouped
+
+
 def get_dashboard_overview(db: Session) -> DashboardOverviewResponse:
     computers = db.query(Computer).order_by(Computer.hostname).all()
 
@@ -534,6 +601,18 @@ def get_dashboard_overview(db: Session) -> DashboardOverviewResponse:
         .all()
     )
 
+    hardware_events_by_computer = _recent_hardware_events_by_computer(
+        db, [c.id for c in computers]
+    )
+
+    computer_summaries = []
+    for c in computers:
+        summary = ComputerSummaryResponse.model_validate(c)
+        summary = summary.model_copy(
+            update={"recent_hardware_events": hardware_events_by_computer.get(c.id, [])}
+        )
+        computer_summaries.append(summary)
+
     return DashboardOverviewResponse(
         total_pcs=len(computers),
         healthy_count=healthy,
@@ -542,9 +621,47 @@ def get_dashboard_overview(db: Session) -> DashboardOverviewResponse:
         offline_count=offline,
         active_alert_count=active_alert_count,
         last_refresh_at=datetime.now(timezone.utc),
-        computers=[ComputerSummaryResponse.model_validate(c) for c in computers],
+        computers=computer_summaries,
         recent_alerts=[AlertSummaryResponse.model_validate(a) for a in recent_alerts],
     )
+
+
+def get_recent_hardware_notifications(
+    db: Session,
+    hours: int = HARDWARE_NOTIFICATION_DEFAULT_HOURS,
+) -> list[HardwareNotificationResponse]:
+    """
+    Bell-icon feed: every "device removed" event (disconnected) across
+    all PCs in the last `hours` hours, newest first. Built from the
+    existing peripheral_events table joined to computers.hostname -
+    no new table, matches HardwareChangeLog/PeripheralEvent already
+    written by _log_peripheral_status_change on each agent check-in.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+
+    rows = (
+        db.query(PeripheralEvent, Computer.hostname, Computer.agent_id)
+        .join(Computer, Computer.id == PeripheralEvent.computer_id)
+        .filter(
+            PeripheralEvent.event_type == PeripheralEventType.DISCONNECTED,
+            PeripheralEvent.occurred_at >= cutoff,
+        )
+        .order_by(PeripheralEvent.occurred_at.desc())
+        .all()
+    )
+
+    return [
+        HardwareNotificationResponse(
+            id=event.id,
+            computer_id=event.computer_id,
+            agent_id=agent_id,
+            hostname=hostname,
+            device_type=event.device_type,
+            message=_hardware_event_message(event.device_type, event.event_type),
+            occurred_at=event.occurred_at,
+        )
+        for event, hostname, agent_id in rows
+    ]
 
 def get_ram_slots_by_agent_id(db: Session, agent_id: str) -> list[RamSlot] | None:
     """

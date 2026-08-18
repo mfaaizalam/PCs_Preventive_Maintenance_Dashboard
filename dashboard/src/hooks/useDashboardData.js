@@ -4,9 +4,10 @@ import { fetchDashboardOverview } from "../api/agentApi";
 /**
  * Loads GET /api/agent/dashboard and refreshes it on an interval so
  * PC cards, alerts, and category views reflect the latest agent
- * check-ins without a manual reload.
+ * check-ins without a manual reload. Defaults to 60s to match the
+ * agent's own check-in interval (agent/config.py:REPORT_INTERVAL_SECONDS).
  */
-export default function useDashboardData(pollMs = 15000) {
+export default function useDashboardData(pollMs = 60000) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);

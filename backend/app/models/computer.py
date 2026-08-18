@@ -13,7 +13,6 @@ if TYPE_CHECKING:
     from app.models.hardware_change_log import HardwareChangeLog
     from app.models.installed_software import InstalledSoftware
     from app.models.maintenance_log import MaintenanceLog
-    from app.models.metric_history import MetricHistory
     from app.models.peripheral import Peripheral
     from app.models.peripheral_event import PeripheralEvent
     from app.models.ram_slot import RamSlot
@@ -124,10 +123,6 @@ class Computer(Base, TimestampMixin):
         cascade="all, delete-orphan",
     )
     installed_software: Mapped[list["InstalledSoftware"]] = relationship(
-        back_populates="computer",
-        cascade="all, delete-orphan",
-    )
-    metrics_history: Mapped[list["MetricHistory"]] = relationship(
         back_populates="computer",
         cascade="all, delete-orphan",
     )

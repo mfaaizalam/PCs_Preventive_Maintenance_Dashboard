@@ -34,7 +34,7 @@ from app.schemas.maintenance_log import (
     MaintenanceLogResponse,
     MaintenanceLogToggle,
 )
-from app.schemas.metric_history import MetricHistoryCreate, MetricHistoryResponse
+from app.schemas.notification import HardwareEventBrief, HardwareNotificationResponse
 from app.schemas.peripheral import (
     PeripheralCreate,
     PeripheralResponse,
@@ -74,6 +74,8 @@ __all__ = [
     "DashboardOverviewResponse",
     "HardwareChangeLogCreate",
     "HardwareChangeLogResponse",
+    "HardwareEventBrief",
+    "HardwareNotificationResponse",
     "InstalledSoftwareCreate",
     "InstalledSoftwareResponse",
     "InstalledSoftwareUpdate",
@@ -84,8 +86,6 @@ __all__ = [
     "MaintenanceTaskCreate",
     "MaintenanceTaskResponse",
     "MaintenanceTaskUpdate",
-    "MetricHistoryCreate",
-    "MetricHistoryResponse",
     "PeripheralCreate",
     "PeripheralEventCreate",
     "PeripheralEventResponse",

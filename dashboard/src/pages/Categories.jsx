@@ -1,12 +1,11 @@
 import { useMemo, useState } from "react";
-import { FolderKanban, ChevronDown, MonitorX, PlusCircle } from "lucide-react";
+import { FolderKanban, ChevronDown, MonitorX } from "lucide-react";
 import useDashboardData from "../hooks/useDashboardData";
 import LoadingState from "../components/common/LoadingState";
 import ErrorState from "../components/common/ErrorState";
 import EmptyState from "../components/common/EmptyState";
 import PCCard from "../components/pcs/PCCard";
 import PCFilters from "../components/pcs/PCFilters";
-import AddPCModal from "../components/pcs/AddPCModal";
 import { filterComputers, sortComputers } from "../utils/pcFilters";
 import { effectiveStatus } from "../utils/status";
 
@@ -64,7 +63,6 @@ export default function Categories() {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [sort, setSort] = useState("hostname-asc");
-  const [addOpen, setAddOpen] = useState(false);
 
   const computers = useMemo(() => data?.computers ?? [], [data]);
 
@@ -103,16 +101,7 @@ export default function Categories() {
             PCs grouped by lab section (CAED, CAD/CAM, Office/Conference/Classroom, etc.)
           </p>
         </div>
-        <button
-          onClick={() => setAddOpen(true)}
-          className="flex items-center gap-1.5 rounded-lg bg-brand-700 px-3.5 py-2 text-sm font-medium text-white hover:bg-brand-800"
-        >
-          <PlusCircle className="h-4 w-4" />
-          Add PC
-        </button>
       </div>
-
-      <AddPCModal open={addOpen} onClose={() => setAddOpen(false)} onCreated={refresh} />
 
       <PCFilters
         query={query}

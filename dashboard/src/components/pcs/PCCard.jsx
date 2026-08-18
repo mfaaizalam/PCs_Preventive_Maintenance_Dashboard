@@ -1,13 +1,19 @@
 import { Link } from "react-router-dom";
-import { AlertTriangle, Tag, Clock } from "lucide-react";
+import { AlertTriangle, Tag, Clock, Network, History, PlugZap } from "lucide-react";
 import StatusBadge from "../common/StatusBadge";
 import MetricGauge from "../common/MetricGauge";
 import { effectiveStatus, statusMeta } from "../../utils/status";
-import { formatRelativeTime } from "../../utils/format";
+import { formatRelativeTime, formatUptime } from "../../utils/format";
+
+const CARD_HARDWARE_ACTIVITY_LIMIT = 2;
 
 export default function PCCard({ computer, alerts = [] }) {
   const status = effectiveStatus(computer);
   const meta = statusMeta(status);
+  const hardwareActivity = (computer.recent_hardware_events || []).slice(
+    0,
+    CARD_HARDWARE_ACTIVITY_LIMIT
+  );
 
   return (
     <Link
@@ -37,18 +43,53 @@ export default function PCCard({ computer, alerts = [] }) {
         <MetricGauge kind="disk" label="Disk" value={computer.disk_usage_percent} size={56} strokeWidth={5} />
       </div>
 
-      <div className="mt-3 flex items-center justify-between text-[12px] text-ink-400">
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-ink-400">
         <span className="inline-flex items-center gap-1">
           <Clock className="h-3 w-3" />
           {computer.is_online ? "Online" : `Last seen ${formatRelativeTime(computer.last_seen)}`}
         </span>
-        {alerts.length > 0 && (
-          <span className="inline-flex items-center gap-1 font-medium text-signal-attention">
-            <AlertTriangle className="h-3.5 w-3.5" />
-            {alerts.length} alert{alerts.length > 1 ? "s" : ""}
+        {computer.ip_address && (
+          <span className="inline-flex items-center gap-1 font-mono">
+            <Network className="h-3 w-3" /> {computer.ip_address}
+          </span>
+        )}
+        {computer.uptime_seconds != null && (
+          <span className="inline-flex items-center gap-1">
+            up {formatUptime(computer.uptime_seconds)}
           </span>
         )}
       </div>
+
+      {alerts.length > 0 && (
+        <div className="mt-2 flex items-center gap-1 text-[12px] font-medium text-signal-attention">
+          <AlertTriangle className="h-3.5 w-3.5" />
+          {alerts.length} alert{alerts.length > 1 ? "s" : ""}
+        </div>
+      )}
+
+      {hardwareActivity.length > 0 && (
+        <div className="mt-3 border-t border-ink-100 pt-2.5">
+          <p className="eyebrow flex items-center gap-1.5">
+            <History className="h-3 w-3" /> Hardware activity (3d)
+          </p>
+          <ul className="mt-1.5 space-y-1">
+            {hardwareActivity.map((event, idx) => (
+              <li
+                key={idx}
+                className="flex items-center justify-between gap-2 text-[12px] text-ink-500"
+              >
+                <span className="inline-flex min-w-0 items-center gap-1 truncate">
+                  <PlugZap className="h-3 w-3 shrink-0 text-ink-300" />
+                  <span className="truncate">{event.message}</span>
+                </span>
+                <span className="shrink-0 text-ink-300">
+                  {formatRelativeTime(event.occurred_at)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </Link>
   );
 }
