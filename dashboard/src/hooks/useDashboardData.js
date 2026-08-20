@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchDashboardOverview } from "../api/agentApi";
+import useWebSocket from "./useWebSocket";
 
 /**
- * Loads GET /api/agent/dashboard and refreshes it on an interval so
- * PC cards, alerts, and category views reflect the latest agent
- * check-ins without a manual reload. Defaults to 60s to match the
- * agent's own check-in interval (agent/config.py:REPORT_INTERVAL_SECONDS).
+ * Loads GET /api/agent/dashboard and keeps it live via the
+ * /ws/dashboard WebSocket: whenever an agent check-in changes
+ * something, the server pushes a small "computer_updated" message
+ * and we refetch the full overview in the background - no reload.
+ *
+ * `pollMs` is now just a slow safety-net poll (default 60s) for the
+ * rare case the socket is down; the socket is what makes updates
+ * feel instant in the normal case.
  */
 export default function useDashboardData(pollMs = 60000) {
   const [data, setData] = useState(null);
@@ -21,16 +26,20 @@ export default function useDashboardData(pollMs = 60000) {
     if (!isBackground) setLoading(true);
     try {
       const result = await fetchDashboardOverview(controller.signal);
-      if (controller.signal.aborted) return; // superseded by a newer call
+      if (controller.signal.aborted) return;
       setData(result);
       setError(null);
     } catch (err) {
-      if (controller.signal.aborted) return; // this call was canceled, not a real failure
+      if (controller.signal.aborted) return;
       setError(err);
     } finally {
       if (!isBackground && !controller.signal.aborted) setLoading(false);
     }
   }, []);
+
+  useWebSocket("/ws/dashboard", (message) => {
+  load(true);
+});
 
   useEffect(() => {
     load(false);

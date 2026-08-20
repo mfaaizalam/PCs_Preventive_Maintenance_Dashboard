@@ -13,8 +13,10 @@ from app.schemas.peripheral_event import PeripheralEventResponse
 from app.schemas.hardware_change_log import HardwareChangeLogResponse
 from app.schemas.notification import HardwareNotificationResponse
 from app.services import computer_service
+from app.ws_manager import manager   # add this import near the top
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])
+
 
 
 @router.post(
@@ -22,13 +24,18 @@ router = APIRouter(prefix="/api/agent", tags=["agent"])
     response_model=ComputerResponse,
     summary="Ingest a single agent check-in report",
 )
-def report(payload: AgentReportPayload, db: Session = Depends(get_db)):
+async def report(payload: AgentReportPayload, db: Session = Depends(get_db)):
     try:
-        return computer_service.ingest_agent_report(db, payload)
+        computer = computer_service.ingest_agent_report(db, payload)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
 
-
+    await manager.broadcast({
+        "type": "computer_updated",
+        "agent_id": computer.agent_id,
+        "hostname": computer.hostname,
+    })
+    return computer
 @router.get(
     "/dashboard",
     response_model=DashboardOverviewResponse,

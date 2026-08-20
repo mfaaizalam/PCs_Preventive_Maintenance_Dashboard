@@ -20,6 +20,7 @@ export default defineConfig(({ mode }) => {
       proxy: {
         "/api": { target: backendTarget, changeOrigin: true },
         "/health": { target: backendTarget, changeOrigin: true },
+        "/ws": { target: backendTarget, changeOrigin: true, ws: true },
       },
     },
   };

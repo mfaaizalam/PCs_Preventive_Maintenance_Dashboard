@@ -7,6 +7,8 @@ from app.db.database import engine
 from app.api.agent import router as agent_router
 from app.api.maintenance import router as maintenance_router
 from app.api.computers import router as computers_router
+from app.api.ws import router as ws_router
+
 
 logger = logging.getLogger("app.cleanup")
 
@@ -24,7 +26,8 @@ app.include_router(agent_router)
 app.include_router(maintenance_router)
 # Manual computer add/remove route
 app.include_router(computers_router)
-
+# ... next to your other app.include_router(...) calls:
+app.include_router(ws_router)
 @app.get("/")
 def root():
     return {

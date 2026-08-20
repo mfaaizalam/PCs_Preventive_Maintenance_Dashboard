@@ -97,6 +97,9 @@ def _map_peripheral_type(device_type: str | None) -> str:
         "touchpad": "mouse",
         "physical_printer": "printer",
         "virtual_printer": "printer",
+        "bluetooth_speaker": "headset",       # closest match in enum
+        "external_ssd": "usb_storage",
+        "external_storage": "usb_storage",
     }
     return mapping.get((device_type or "").lower(), "other")
 

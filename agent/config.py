@@ -12,7 +12,7 @@ AGENT_REPORT_URL = f"{API_BASE_URL}/api/agent/report"
 # ------------------------------------------------------------------
 # REPORTING SCHEDULE
 # ------------------------------------------------------------------
-REPORT_INTERVAL_SECONDS = 60
+REPORT_INTERVAL_SECONDS = 10
 
 # ------------------------------------------------------------------
 # HTTP BEHAVIOUR

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchMaintenanceComputers } from "../api/maintenanceApi";
+import useWebSocket from "./useWebSocket";
 
 export default function useMaintenanceComputers() {
   const [computers, setComputers] = useState([]);
@@ -7,8 +8,8 @@ export default function useMaintenanceComputers() {
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
-    setLoading(true);
     setError(null);
+
     try {
       const result = await fetchMaintenanceComputers();
       setComputers(result);
@@ -19,9 +20,23 @@ export default function useMaintenanceComputers() {
     }
   }, []);
 
+  // Initial load
   useEffect(() => {
+    setLoading(true);
     load();
   }, [load]);
 
-  return { computers, error, loading, refresh: load };
+  // Live update
+  useWebSocket("/ws/dashboard", (message) => {
+    if (message?.type === "computer_updated") {
+      load();
+    }
+  });
+
+  return {
+    computers,
+    error,
+    loading,
+    refresh: load,
+  };
 }
