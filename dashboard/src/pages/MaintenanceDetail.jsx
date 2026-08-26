@@ -8,6 +8,7 @@ import EmptyState from "../components/common/EmptyState";
 import FrequencyTabs from "../components/maintenance/FrequencyTabs";
 import PeriodSelector from "../components/maintenance/PeriodSelector";
 import ChecklistTable from "../components/maintenance/ChecklistTable";
+import PrintExportButton from "../components/maintenance/PrintExportButton";
 import { useAuth } from "../auth/AuthContext";
 import { periodLabelFor, recentPeriods } from "../utils/period";
 import { formatGb } from "../utils/format";
@@ -70,13 +71,21 @@ export default function MaintenanceDetail() {
 
             <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-ink-100 pt-5">
               <FrequencyTabs value={frequency} onChange={handleFrequencyChange} />
-              <PeriodSelector
-                frequency={frequency}
-                periods={periods}
-                value={period}
-                onChange={setPeriod}
-                currentPeriod={currentPeriod}
-              />
+              <div className="flex flex-wrap items-center gap-3">
+                <PeriodSelector
+                  frequency={frequency}
+                  periods={periods}
+                  value={period}
+                  onChange={setPeriod}
+                  currentPeriod={currentPeriod}
+                />
+                <PrintExportButton
+                  frequency={frequency}
+                  period={period}
+                  computerId={view.computer_id}
+                  hostname={view.hostname}
+                />
+              </div>
             </div>
           </div>
 

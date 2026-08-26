@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
+from app.models.computer import Computer
 from app.models.enums import MaintenanceFrequency
 from app.schemas.computer import ComputerSummaryResponse
 from app.schemas.maintenance import MaintenanceSummaryResponse, MaintenanceTaskResponse
@@ -10,7 +12,7 @@ from app.schemas.maintenance_log import (
     MaintenanceLogResponse,
     MaintenanceLogToggle,
 )
-from app.services import maintenance_service
+from app.services import export_service, maintenance_service
 
 router = APIRouter(prefix="/api/maintenance", tags=["maintenance"])
 
@@ -86,3 +88,32 @@ def toggle_log(payload: MaintenanceLogToggle, db: Session = Depends(get_db)):
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+
+
+@router.get(
+    "/export",
+    summary="Download the checklist for one frequency/period as an Excel file",
+)
+def export_checklist(
+    frequency: MaintenanceFrequency,
+    period: str = Query(..., description="Same period_label format used by /summary and /checklist"),
+    computer_id: int | None = Query(
+        None, description="Omit for the whole master list; set to export a single PC only"
+    ),
+    db: Session = Depends(get_db),
+):
+    if computer_id is not None:
+        computer = db.query(Computer).filter(Computer.id == computer_id).first()
+        if not computer:
+            raise HTTPException(status_code=404, detail=f"Computer {computer_id} not found")
+        buffer = export_service.build_single_computer_workbook(db, computer, frequency.value, period)
+    else:
+        computer = None
+        buffer = export_service.build_whole_lab_workbook(db, frequency.value, period)
+
+    filename = export_service.export_filename(frequency.value, period, computer)
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

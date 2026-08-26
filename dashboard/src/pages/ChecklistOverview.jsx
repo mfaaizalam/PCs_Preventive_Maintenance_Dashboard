@@ -19,6 +19,7 @@ import ErrorState from "../components/common/ErrorState";
 import EmptyState from "../components/common/EmptyState";
 import FrequencyTabs from "../components/maintenance/FrequencyTabs";
 import PeriodSelector from "../components/maintenance/PeriodSelector";
+import PrintExportButton from "../components/maintenance/PrintExportButton";
 import { periodLabelFor, recentPeriods } from "../utils/period";
 
 const COLORS = ["#2563eb", "#16a34a", "#d97706", "#dc2626", "#7c3aed", "#0891b2", "#be185d"];
@@ -71,13 +72,16 @@ export default function ChecklistOverview() {
 
       <div className="panel flex flex-wrap items-center justify-between gap-3 p-4">
         <FrequencyTabs value={frequency} onChange={handleFrequencyChange} />
-        <PeriodSelector
-          frequency={frequency}
-          periods={periods}
-          value={period}
-          onChange={setPeriod}
-          currentPeriod={currentPeriod}
-        />
+        <div className="flex flex-wrap items-center gap-3">
+          <PeriodSelector
+            frequency={frequency}
+            periods={periods}
+            value={period}
+            onChange={setPeriod}
+            currentPeriod={currentPeriod}
+          />
+          <PrintExportButton frequency={frequency} period={period} />
+        </div>
       </div>
 
       {loading && !summary ? (

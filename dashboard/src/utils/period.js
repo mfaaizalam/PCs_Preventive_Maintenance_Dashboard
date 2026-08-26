@@ -166,11 +166,13 @@ export function recentPeriods(frequency, count = 6, referenceDate = new Date()) 
   return [...new Set(periods)];
 }
 
+// Only the three frequencies the master-list Excel actually defines
+// tasks for. "weekly", "quarterly", and "custom" still exist in the
+// backend's MaintenanceFrequency enum (so nothing breaks if tasks are
+// added for them later) but are hidden here until real task lists
+// exist for them - showing an empty tab is worse than not showing it.
 export const FREQUENCY_OPTIONS = [
-  { value: "weekly", label: "Weekly" },
   { value: "biweekly", label: "Biweekly" },
   { value: "monthly", label: "Monthly" },
-  { value: "quarterly", label: "Quarterly" },
   { value: "half_yearly", label: "Half-Yearly" },
-  { value: "custom", label: "Custom" },
 ];

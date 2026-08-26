@@ -53,6 +53,39 @@ export function fetchMaintenanceSummary(frequency, period, signal) {
  * POST /api/maintenance/log
  * Tick or untick one checklist item for one computer/period.
  */
+/**
+ * GET /api/maintenance/export
+ * Downloads the checklist for one frequency/period as an .xlsx file -
+ * either the whole master list (computerId omitted) or a single PC.
+ * Triggers a browser download; does not return the data.
+ */
+export async function downloadChecklistExport({ frequency, period, computerId }) {
+  const response = await client.get("/api/maintenance/export", {
+    params: {
+      frequency,
+      period,
+      ...(computerId ? { computer_id: computerId } : {}),
+    },
+    responseType: "blob",
+  });
+
+  // Prefer the server's filename (from Content-Disposition) so it stays
+  // in sync with export_service.export_filename() without duplicating
+  // the naming convention here.
+  const disposition = response.headers?.["content-disposition"] || "";
+  const match = disposition.match(/filename="?([^"]+)"?/);
+  const filename = match?.[1] || `maintenance_${frequency}_${period}.xlsx`;
+
+  const url = window.URL.createObjectURL(new Blob([response.data]));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+}
+
 export function toggleMaintenanceLog({
   computerId,
   maintenanceTaskId,
