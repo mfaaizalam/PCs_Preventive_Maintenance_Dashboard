@@ -3,7 +3,9 @@ import subprocess
 
 import psutil
 import wmi
+import logging
 
+logger = logging.getLogger(__name__)
 
 # ============================================================
 # RAM
@@ -441,7 +443,22 @@ def get_hardware_info():
             get_motherboard_info(),
     }
 
-
+def get_system_uuid():
+    """
+    SMBIOS System UUID - far more reliably populated across OEMs
+    than motherboard serial number, which is frequently blank on
+    budget/OEM boards. This is the primary hardware identity used
+    to re-link an agent if agent_id.txt is ever lost/deleted.
+    """
+    try:
+        computer = wmi.WMI()
+        for product in computer.Win32_ComputerSystemProduct():
+            uuid = (product.UUID or "").strip()
+            if uuid and uuid.upper() != "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF":
+                return uuid
+    except Exception as exc:
+        logger.error("System UUID collection error: %s", exc)
+    return None
 # ============================================================
 # TEST
 # ============================================================

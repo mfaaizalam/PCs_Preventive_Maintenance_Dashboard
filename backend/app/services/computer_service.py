@@ -6,6 +6,7 @@ the dashboard overview. Called by app/api/agent.py.
 import re
 from datetime import datetime, timedelta, timezone
 from app.models.storage_device import StorageDevice
+from app.core.config import settings
 from sqlalchemy.orm import Session
 from app.models.ram_slot import RamSlot
 from app.models.alert import Alert
@@ -779,3 +780,34 @@ def get_hardware_changes_by_agent_id(
         .limit(limit)
         .all()
     )
+
+
+
+def mark_stale_computers_offline(db: Session) -> list[Computer]:
+    """
+    Flips is_online=False (and status=OFFLINE) for any computer whose
+    last_seen is older than OFFLINE_THRESHOLD_SECONDS. Returns the list
+    of computers that were just flipped, so the caller can broadcast
+    the change over the websocket.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(
+        seconds=settings.OFFLINE_THRESHOLD_SECONDS
+    )
+
+    stale = (
+        db.query(Computer)
+        .filter(Computer.is_online.is_(True))
+        .filter(
+            (Computer.last_seen.is_(None)) | (Computer.last_seen < cutoff)
+        )
+        .all()
+    )
+
+    for computer in stale:
+        computer.is_online = False
+        computer.status = ComputerStatus.OFFLINE
+
+    if stale:
+        db.commit()
+
+    return stale

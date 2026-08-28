@@ -3,16 +3,18 @@ import os
 # ------------------------------------------------------------------
 # BACKEND CONNECTION
 # ------------------------------------------------------------------
-# Point this at the LAN IP of the PC running the FastAPI backend.
-# Every lab PC's agent sends its report here - do NOT leave this as
-# 127.0.0.1 on any machine except the server itself.
-API_BASE_URL = "http://127.0.0.1:8000"
+API_BASE_URL = os.environ.get("AGENT_API_BASE_URL", "http://127.0.0.1:8000")
 AGENT_REPORT_URL = f"{API_BASE_URL}/api/agent/report"
 
 # ------------------------------------------------------------------
 # REPORTING SCHEDULE
 # ------------------------------------------------------------------
-REPORT_INTERVAL_SECONDS = 10
+# Fast loop: cheap live metrics only (cpu/ram/disk/uptime).
+FAST_REPORT_INTERVAL_SECONDS = 10
+
+# Slow loop: heavy hardware/software/license/peripheral scan - this
+# data barely changes, so it's only re-collected this often.
+SLOW_REPORT_INTERVAL_SECONDS = 1800  # 30 minutes
 
 # ------------------------------------------------------------------
 # HTTP BEHAVIOUR
@@ -24,16 +26,14 @@ RETRY_BACKOFF_SECONDS = 5
 # ------------------------------------------------------------------
 # AGENT IDENTITY
 # ------------------------------------------------------------------
-# A stable, unique id is generated once per PC and cached here so the
-# backend recognizes this machine on every future check-in (this is
-# what makes the backend UPDATE the same row instead of creating a
-# new computer every restart).
-AGENT_ID_FILE = os.path.join(os.path.dirname(__file__), "agent_id.txt")
+# Stored OUTSIDE the project folder so it can never end up in git and
+# survives re-clones/re-deploys of the code on the same machine.
+AGENT_ID_DIR = os.environ.get("AGENT_ID_DIR", r"C:\ProgramData\LabAgent")
+AGENT_ID_FILE = os.path.join(AGENT_ID_DIR, "agent_id.txt")
 
 # ------------------------------------------------------------------
 # OPTIONAL LAB METADATA
 # ------------------------------------------------------------------
-# Fill these in per deployment if useful, otherwise leave as None.
-LAB_NAME = None
-LAB_SECTION = None
-ASSET_ID = None
+LAB_NAME = os.environ.get("AGENT_LAB_NAME")
+LAB_SECTION = os.environ.get("AGENT_LAB_SECTION")
+ASSET_ID = os.environ.get("AGENT_ASSET_ID")

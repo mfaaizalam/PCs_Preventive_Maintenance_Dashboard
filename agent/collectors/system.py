@@ -30,7 +30,7 @@ def get_system_info():
         ip_address = None
 
     # CPU usage
-    cpu_usage = psutil.cpu_percent(interval=1)
+    cpu_usage = psutil.cpu_percent(interval=None)
 
     # RAM usage
     ram_usage = psutil.virtual_memory().percent

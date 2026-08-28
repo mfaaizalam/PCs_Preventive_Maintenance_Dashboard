@@ -4,7 +4,6 @@ import RequireAuth from "./auth/RequireAuth";
 import Layout from "./components/layout/Layout";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
-import Categories from "./pages/Categories";
 import PCDetails from "./pages/PCDetails";
 import Maintenance from "./pages/Maintenance";
 import MaintenanceDetail from "./pages/MaintenanceDetail";
@@ -25,7 +24,6 @@ export default function App() {
             }
           >
             <Route path="/" element={<Dashboard />} />
-            <Route path="/categories" element={<Categories />} />
             <Route path="/pcs/:agentId" element={<PCDetails />} />
             <Route path="/maintenance" element={<Maintenance />} />
             <Route path="/maintenance/:computerId" element={<MaintenanceDetail />} />

@@ -2,7 +2,7 @@ import logging
 import time
 import uuid
 from datetime import datetime, timezone
-
+import os
 import config
 from collectors.hardware import get_hardware_info
 from collectors.licenses import get_license_info
@@ -10,7 +10,8 @@ from collectors.peripherals import get_peripherals
 from collectors.software import get_software_inventory
 from collectors.system import get_system_info
 from services.api_client import send_report
-
+from collectors.hardware import get_system_uuid
+import psutil 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -23,12 +24,7 @@ logger = logging.getLogger("agent")
 # ============================================================
 
 def get_or_create_agent_id() -> str:
-    """
-    Return a stable id for this PC, generating and caching one on
-    first run. This is what lets the backend recognize the same
-    machine on every check-in and UPDATE its row instead of creating
-    a new one.
-    """
+    os.makedirs(config.AGENT_ID_DIR, exist_ok=True)
 
     try:
         with open(config.AGENT_ID_FILE, "r", encoding="utf-8") as f:
@@ -251,7 +247,7 @@ def _build_installed_software(software_list: list[dict]) -> list[dict]:
 # BUILD FULL PAYLOAD (matches AgentReportPayload schema)
 # ============================================================
 
-def build_report_payload(agent_id: str, raw: dict) -> dict:
+def build_report_payload(agent_id: str, raw: dict, hardware_uuid: str | None) -> dict:
     system = raw["system"]
     hardware = raw["hardware"]
 
@@ -267,9 +263,6 @@ def build_report_payload(agent_id: str, raw: dict) -> dict:
 
     cpu_list = hardware.get("cpu", [])
     cpu_model = cpu_list[0].get("name") if cpu_list else None
-
-    motherboard_list = hardware.get("motherboard", [])
-    hardware_uuid = motherboard_list[0].get("serial_number") if motherboard_list else None
 
     now_iso = datetime.now(timezone.utc).isoformat()
 
@@ -315,23 +308,47 @@ def build_report_payload(agent_id: str, raw: dict) -> dict:
 # ============================================================
 # MAIN LOOP - runs forever, one report every REPORT_INTERVAL_SECONDS
 # ============================================================
-
 def run_forever():
     agent_id = get_or_create_agent_id()
+    psutil.cpu_percent(interval=None)
+
+    # Static for the life of the process - computed once, not every cycle.
+    hardware_uuid = get_system_uuid()
 
     logger.info(
-        "Agent starting | agent_id=%s | interval=%ss | target=%s",
+        "Agent starting | agent_id=%s | hardware_uuid=%s | fast_interval=%ss | slow_interval=%ss | target=%s",
         agent_id,
-        config.REPORT_INTERVAL_SECONDS,
+        hardware_uuid,
+        config.FAST_REPORT_INTERVAL_SECONDS,
+        config.SLOW_REPORT_INTERVAL_SECONDS,
         config.AGENT_REPORT_URL,
     )
+
+    def collect_slow():
+        return {
+            "hardware": get_hardware_info(),
+            "licenses": get_license_info(),
+            "software": get_software_inventory(),
+        }
+
+    slow_raw = collect_slow()
+    last_slow_refresh = time.monotonic()
 
     while True:
         cycle_start = time.monotonic()
 
         try:
-            raw = collect_raw()
-            payload = build_report_payload(agent_id, raw)
+            if time.monotonic() - last_slow_refresh >= config.SLOW_REPORT_INTERVAL_SECONDS:
+                slow_raw = collect_slow()
+                last_slow_refresh = time.monotonic()
+                logger.info("Refreshed hardware/software/license inventory")
+
+            raw = {
+                "system": get_system_info(),
+                "peripherals": get_peripherals(),
+                **slow_raw,
+            }
+            payload = build_report_payload(agent_id, raw, hardware_uuid)
             result = send_report(payload)
 
             if result:
@@ -342,14 +359,10 @@ def run_forever():
                 )
 
         except Exception:
-            # Never let one bad cycle kill the agent - just log and
-            # try again on the next scheduled run.
             logger.exception("Unexpected error during collection/report cycle")
 
-        # Account for how long collection+send took so the interval
-        # stays close to REPORT_INTERVAL_SECONDS regardless of load.
         elapsed = time.monotonic() - cycle_start
-        sleep_for = max(0, config.REPORT_INTERVAL_SECONDS - elapsed)
+        sleep_for = max(0, config.FAST_REPORT_INTERVAL_SECONDS - elapsed)
         time.sleep(sleep_for)
 
 

@@ -3,7 +3,6 @@ import { LayoutGrid, FolderKanban, ClipboardCheck, BarChart3, MonitorCog, X } fr
 
 const NAV_ITEMS = [
   { to: "/", label: "Dashboard", icon: LayoutGrid, end: true },
-  { to: "/categories", label: "Categories", icon: FolderKanban },
   { to: "/maintenance", label: "Maintenance", icon: ClipboardCheck },
   { to: "/maintenance-overview", label: "Checklist Overview", icon: BarChart3 },
 ];
