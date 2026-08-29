@@ -1,13 +1,22 @@
 import { Link } from "react-router-dom";
-import { AlertTriangle, Tag, Clock, Network, History, PlugZap } from "lucide-react";
+import { AlertTriangle, Tag, Clock, Network, History, PlugZap, Building2, MapPin } from "lucide-react";
 import StatusBadge from "../common/StatusBadge";
 import MetricGauge from "../common/MetricGauge";
+import EditableTag from "./EditableTag";
 import { effectiveStatus, statusMeta } from "../../utils/status";
 import { formatRelativeTime, formatUptime } from "../../utils/format";
 
 const CARD_HARDWARE_ACTIVITY_LIMIT = 2;
 
-export default function PCCard({ computer, alerts = [] }) {
+// computer.department defaults to "IMD" and lab_section defaults to
+// "CAD" server-side once a value is set; before that ever happens
+// (e.g. a brand new row with neither auto-derived nor hand-edited
+// yet) these are the same fallbacks shown in the UI so the card never
+// renders a blank tag.
+const DEFAULT_DEPARTMENT = "IMD";
+const DEFAULT_LAB_NAME = "CAD";
+
+export default function PCCard({ computer, alerts = [], onUpdateComputer }) {
   const status = effectiveStatus(computer);
   const meta = statusMeta(status);
   const hardwareActivity = (computer.recent_hardware_events || []).slice(
@@ -26,12 +35,24 @@ export default function PCCard({ computer, alerts = [] }) {
             {computer.hostname}
           </p>
           <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[12px] text-ink-400">
-            {computer.asset_id && (
-              <span className="inline-flex items-center gap-1 font-mono">
-                <Tag className="h-3 w-3" /> {computer.asset_id}
-              </span>
-            )}
-            {computer.lab_section && <span>{computer.lab_section}</span>}
+            <EditableTag
+              icon={MapPin}
+              value={computer.lab_section}
+              placeholder={DEFAULT_LAB_NAME}
+              onSave={(v) => onUpdateComputer?.(computer.id, { lab_section: v })}
+            />
+            <EditableTag
+              icon={Building2}
+              value={computer.department}
+              placeholder={DEFAULT_DEPARTMENT}
+              onSave={(v) => onUpdateComputer?.(computer.id, { department: v })}
+            />
+            <EditableTag
+              icon={Tag}
+              value={computer.asset_id}
+              placeholder="Asset ID"
+              onSave={(v) => onUpdateComputer?.(computer.id, { asset_id: v })}
+            />
           </div>
         </div>
         <StatusBadge status={status} size="sm" />

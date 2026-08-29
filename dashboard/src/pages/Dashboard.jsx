@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { MonitorX } from "lucide-react";
 import useDashboardData from "../hooks/useDashboardData";
+import { updateComputer } from "../api/computersApi";
 import LoadingState from "../components/common/LoadingState";
 import ErrorState from "../components/common/ErrorState";
 import EmptyState from "../components/common/EmptyState";
@@ -15,20 +16,41 @@ export default function Dashboard() {
   const { data, error, loading, refresh } = useDashboardData();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
-  const [category, setCategory] = useState("all");
+  // Two independent filters instead of one "category" dropdown:
+  // department (IMD, etc.) and lab name (lab_section - CAD, CAED,
+  // etc., the same field the old single "Category" filter used).
+  const [department, setDepartment] = useState("all");
+  const [labName, setLabName] = useState("all");
   const [sort, setSort] = useState("hostname-asc");
 
   const computers = useMemo(() => data?.computers ?? [], [data]);
 
-  const categoryOptions = useMemo(
+  const departmentOptions = useMemo(
+    () => [...new Set(computers.map((c) => c.department || "IMD"))].sort(),
+    [computers]
+  );
+
+  const labNameOptions = useMemo(
     () => [...new Set(computers.map((c) => c.lab_section || "Unassigned"))].sort(),
     [computers]
   );
 
   const visibleComputers = useMemo(() => {
-    const filtered = filterComputers(computers, { query, status, category });
+    const filtered = filterComputers(computers, { query, status, department, labName });
     return sortComputers(filtered, sort);
-  }, [computers, query, status, category, sort]);
+  }, [computers, query, status, department, labName, sort]);
+
+  // Pencil-icon edits on PCCard call this; PATCH the field, then
+  // refresh the dashboard overview so the change (and any
+  // department/lab-name filter it now belongs under) shows up
+  // immediately instead of waiting for the next websocket push.
+  const handleUpdateComputer = useCallback(
+    async (computerId, updates) => {
+      await updateComputer(computerId, updates);
+      await refresh();
+    },
+    [refresh]
+  );
 
   const alertsByComputer = useMemo(() => {
     const map = {};
@@ -68,9 +90,12 @@ export default function Dashboard() {
             onQueryChange={setQuery}
             status={status}
             onStatusChange={setStatus}
-            category={category}
-            onCategoryChange={setCategory}
-            categoryOptions={categoryOptions}
+            department={department}
+            onDepartmentChange={setDepartment}
+            departmentOptions={departmentOptions}
+            labName={labName}
+            onLabNameChange={setLabName}
+            labNameOptions={labNameOptions}
             sort={sort}
             onSortChange={setSort}
           />
@@ -88,6 +113,7 @@ export default function Dashboard() {
                   key={computer.id}
                   computer={computer}
                   alerts={alertsByComputer[computer.id] || []}
+                  onUpdateComputer={handleUpdateComputer}
                 />
               ))}
             </div>

@@ -15,6 +15,7 @@ class ComputerBase(BaseModel):
     ip_address: str | None = Field(default=None, max_length=45)
     lab_name: str | None = Field(default=None, max_length=100)
     lab_section: str | None = Field(default=None, max_length=100)
+    department: str | None = Field(default=None, max_length=100)
     os_name: str | None = Field(default=None, max_length=100)
     os_version: str | None = Field(default=None, max_length=100)
     cpu_model: str | None = Field(default=None, max_length=200)
@@ -32,6 +33,20 @@ class ComputerBase(BaseModel):
 
 class ComputerCreate(ComputerBase):
     pass
+
+
+class ComputerMetadataUpdate(BaseModel):
+    """
+    Shape for the dashboard's pencil-icon edit (PATCH
+    /api/computers/{id}). Deliberately narrow - only the fields an
+    admin is meant to hand-correct from the UI, never the
+    agent-reported metrics/hardware fields. All optional: send only
+    the field(s) you're changing.
+    """
+
+    department: str | None = Field(default=None, max_length=100)
+    lab_section: str | None = Field(default=None, max_length=100)
+    asset_id: str | None = Field(default=None, max_length=50)
 
 
 class ComputerUpdate(BaseModel):
@@ -62,6 +77,8 @@ class ComputerIngest(ComputerUpdate):
 
 class ComputerResponse(ComputerBase, TimestampSchema, ORMModel):
     id: int
+    is_retired: bool = False
+    retired_at: datetime | None = None
 
 
 class ComputerSummaryResponse(ORMModel):
@@ -71,8 +88,10 @@ class ComputerSummaryResponse(ORMModel):
     hostname: str
     lab_name: str | None
     lab_section: str | None
+    department: str | None = None
     status: ComputerStatus
     is_online: bool
+    is_retired: bool = False
     ip_address: str | None = None
     cpu_usage_percent: float | None
     ram_usage_percent: float | None

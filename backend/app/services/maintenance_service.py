@@ -226,9 +226,15 @@ def get_maintenance_summary(
 
 
 def list_computers_for_maintenance(db: Session) -> list[Computer]:
-    """All enrolled PCs, ordered the way the master list is ordered."""
+    """
+    All enrolled, non-retired PCs, ordered the way the master list is
+    ordered. Retired PCs are excluded so a dead/replaced PC stops
+    appearing in the checklist and its Excel export on its own, with
+    no manual delete needed.
+    """
     return (
         db.query(Computer)
+        .filter(Computer.is_retired.is_(False))
         .order_by(Computer.s_no.asc().nulls_last(), Computer.hostname.asc())
         .all()
     )

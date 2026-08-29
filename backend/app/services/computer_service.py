@@ -82,6 +82,23 @@ RAM_CRITICAL = 95
 DISK_WARNING = 85
 DISK_CRITICAL = 95
 
+# ------------------------------------------------------------------
+# AUTO-RETIREMENT (replaces manual "delete the stale PC" cleanup)
+# ------------------------------------------------------------------
+# A PC that's been offline this long is a candidate for retirement -
+# short on purpose so it lines up with the biweekly checklist cycle
+# (a PC that missed two full cycles is almost certainly dead/swapped,
+# not just powered off for a long weekend).
+STALE_RETIRE_DAYS = 21
+
+# Safety guard: if this fraction (or more) of the WHOLE fleet is
+# offline at once, nothing gets retired this sweep. A single dead PC
+# is offline while its neighbours keep checking in; a lab-wide
+# shutdown (semester break, power cut, building closed) takes
+# everyone offline together and must never be read as "every PC was
+# replaced". Retirement only fires for isolated, individual silence.
+MASS_OFFLINE_GUARD_RATIO = 0.5
+
 TRACKED_COMPUTER_FIELDS = {
     "hostname": HardwareChangeType.OTHER,
     "ip_address": HardwareChangeType.NETWORK,
@@ -204,7 +221,41 @@ def delete_computer(db: Session, computer_id: int) -> bool:
 
 def get_computer_by_agent_id(db: Session, agent_id: str) -> Computer | None:
     return db.query(Computer).filter(Computer.agent_id == agent_id).first()
+def update_computer_metadata(
+    db: Session,
+    computer_id: int,
+    department: str | None = None,
+    lab_section: str | None = None,
+    asset_id: str | None = None,
+) -> Computer | None:
+    """
+    Applies the dashboard pencil-icon edit. Only touches fields that
+    were actually sent (None means "leave alone", not "clear") - so a
+    PATCH with only `department` set never blanks out lab_section.
+    """
+    computer = db.query(Computer).filter(Computer.id == computer_id).first()
+    if computer is None:
+        return None
 
+    if department is not None:
+        computer.department = department
+
+    if lab_section is not None:
+        computer.lab_section = lab_section
+
+    if asset_id is not None:
+        clash = (
+            db.query(Computer.id)
+            .filter(Computer.asset_id == asset_id, Computer.id != computer_id)
+            .first()
+        )
+        if clash:
+            raise ValueError(f"Asset ID '{asset_id}' is already used by computer id={clash.id}")
+        computer.asset_id = asset_id
+
+    db.commit()
+    db.refresh(computer)
+    return computer
 
 def ingest_agent_report(db: Session, payload: AgentReportPayload) -> Computer:
     """
@@ -283,6 +334,13 @@ def ingest_agent_report(db: Session, payload: AgentReportPayload) -> Computer:
         value = getattr(payload, field, None)
         if value is not None:
             setattr(computer, field, value)
+
+        # A PC that was auto-retired (see auto_retire_stale_computers) but
+    # is now checking in again is obviously not dead/replaced after
+    # all - clear the retirement with zero admin action.
+    if computer.is_retired:
+        computer.is_retired = False
+        computer.retired_at = None
 
     computer.is_online = payload.is_online
     computer.last_seen = payload.reported_at or now
@@ -580,8 +638,11 @@ def _recent_hardware_events_by_computer(
     return grouped
 
 
-def get_dashboard_overview(db: Session) -> DashboardOverviewResponse:
-    computers = db.query(Computer).order_by(Computer.hostname).all()
+def get_dashboard_overview(db: Session, include_retired: bool = False) -> DashboardOverviewResponse:
+    query = db.query(Computer)
+    if not include_retired:
+        query = query.filter(Computer.is_retired.is_(False))
+    computers = query.order_by(Computer.hostname).all()
 
     healthy = sum(1 for c in computers if c.status == ComputerStatus.HEALTHY)
     attention = sum(1 for c in computers if c.status == ComputerStatus.ATTENTION)
@@ -782,6 +843,46 @@ def get_hardware_changes_by_agent_id(
     )
 
 
+def auto_retire_stale_computers(
+    db: Session,
+    stale_days: int = STALE_RETIRE_DAYS,
+    guard_ratio: float = MASS_OFFLINE_GUARD_RATIO,
+) -> list[Computer]:
+    """
+    A computer is retired (not deleted - just hidden from the default
+    dashboard/export views) when it has been offline longer than
+    `stale_days` AND doing so does not look like a lab-wide outage: if
+    `guard_ratio` or more of the entire fleet is offline right now,
+    this sweep does nothing at all.
+    """
+    total = db.query(Computer).count()
+    if total == 0:
+        return []
+
+    currently_offline = db.query(Computer).filter(Computer.is_online.is_(False)).count()
+    if (currently_offline / total) >= guard_ratio:
+        return []
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=stale_days)
+
+    candidates = (
+        db.query(Computer)
+        .filter(Computer.is_retired.is_(False))
+        .filter(Computer.is_online.is_(False))
+        .filter((Computer.last_seen.is_(None)) | (Computer.last_seen < cutoff))
+        .all()
+    )
+
+    if not candidates:
+        return []
+
+    now = datetime.now(timezone.utc)
+    for computer in candidates:
+        computer.is_retired = True
+        computer.retired_at = now
+
+    db.commit()
+    return candidates
 
 def mark_stale_computers_offline(db: Session) -> list[Computer]:
     """

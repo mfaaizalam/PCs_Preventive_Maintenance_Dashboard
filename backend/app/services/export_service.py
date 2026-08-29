@@ -142,10 +142,17 @@ def _write_computer_block(
     start_row = row
     spec = _spec_string(computer)
 
+    # s_no is admin-assigned and usually never set, which left this
+    # column blank in the exported sheet. Fall back to asset_id (which
+    # IS populated automatically from the hostname on check-in) so the
+    # column always shows something useful. s_no still wins when
+    # someone has deliberately set it to match a paper master list.
+    display_no = computer.s_no if computer.s_no is not None else (computer.asset_id or "")
+
     for i, item in enumerate(checklist):
         status = _row_status(item["completed"], frequency, period_label)
         values = [
-            computer.s_no if i == 0 else "",
+            display_no if i == 0 else "",
             computer.hostname if i == 0 else "",
             spec if i == 0 else "",
             item["task_name"],

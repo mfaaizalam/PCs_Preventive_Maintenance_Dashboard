@@ -22,9 +22,12 @@ export default function PCFilters({
   onQueryChange,
   status,
   onStatusChange,
-  category,
-  onCategoryChange,
-  categoryOptions,
+  department,
+  onDepartmentChange,
+  departmentOptions,
+  labName,
+  onLabNameChange,
+  labNameOptions,
   sort,
   onSortChange,
 }) {
@@ -52,16 +55,31 @@ export default function PCFilters({
         ))}
       </select>
 
-      {categoryOptions && categoryOptions.length > 0 && (
+      {departmentOptions && departmentOptions.length > 0 && (
         <select
-          value={category}
-          onChange={(e) => onCategoryChange(e.target.value)}
+          value={department}
+          onChange={(e) => onDepartmentChange(e.target.value)}
           className="rounded-lg border border-ink-200 bg-white px-3 py-2 text-sm text-ink-700 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
         >
-          <option value="all">All categories</option>
-          {categoryOptions.map((c) => (
-            <option key={c} value={c}>
-              {c}
+          <option value="all">All departments</option>
+          {departmentOptions.map((d) => (
+            <option key={d} value={d}>
+              {d}
+            </option>
+          ))}
+        </select>
+      )}
+
+      {labNameOptions && labNameOptions.length > 0 && (
+        <select
+          value={labName}
+          onChange={(e) => onLabNameChange(e.target.value)}
+          className="rounded-lg border border-ink-200 bg-white px-3 py-2 text-sm text-ink-700 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
+        >
+          <option value="all">All labs</option>
+          {labNameOptions.map((l) => (
+            <option key={l} value={l}>
+              {l}
             </option>
           ))}
         </select>

@@ -2,14 +2,15 @@ import { effectiveStatus } from "./status";
 
 const STATUS_SEVERITY = { critical: 0, attention: 1, offline: 2, unknown: 3, healthy: 4 };
 
-export function filterComputers(computers, { query, status, category }) {
+export function filterComputers(computers, { query, status, department, labName }) {
   const q = query.trim().toLowerCase();
 
   return computers.filter((c) => {
     if (status && status !== "all" && effectiveStatus(c) !== status) return false;
-    if (category && category !== "all" && (c.lab_section || "Unassigned") !== category) return false;
+    if (department && department !== "all" && (c.department || "IMD") !== department) return false;
+    if (labName && labName !== "all" && (c.lab_section || "Unassigned") !== labName) return false;
     if (!q) return true;
-    const haystack = [c.hostname, c.asset_id, c.agent_id, c.lab_name, c.lab_section]
+    const haystack = [c.hostname, c.asset_id, c.agent_id, c.department, c.lab_name, c.lab_section]
       .filter(Boolean)
       .join(" ")
       .toLowerCase();

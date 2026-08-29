@@ -11,7 +11,7 @@ from app.api.agent import router as agent_router
 from app.api.maintenance import router as maintenance_router
 from app.api.computers import router as computers_router
 from app.api.ws import router as ws_router
-from app.services.computer_service import mark_stale_computers_offline
+from app.services.computer_service import auto_retire_stale_computers, mark_stale_computers_offline
 from app.ws_manager import manager
 
 
@@ -33,6 +33,20 @@ async def _offline_sweep_loop():
                         "agent_id": computer.agent_id,
                         "hostname": computer.hostname,
                         "is_online": False,
+                    })
+
+                retired = await asyncio.to_thread(auto_retire_stale_computers, db)
+                for computer in retired:
+                    logger.info(
+                        "Auto-retired (offline %s+ days, not a mass outage): %s",
+                        computer.retired_at,
+                        computer.hostname,
+                    )
+                    await manager.broadcast({
+                        "type": "computer_updated",
+                        "agent_id": computer.agent_id,
+                        "hostname": computer.hostname,
+                        "is_retired": True,
                     })
             finally:
                 db.close()

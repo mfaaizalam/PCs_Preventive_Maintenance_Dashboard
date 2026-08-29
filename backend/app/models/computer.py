@@ -69,6 +69,26 @@ class Computer(Base, TimestampMixin):
 
     lab_section: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
+    # Admin-editable only - agents never report this (it's not in
+    # DIRECT_ASSIGN_FIELDS / AgentReportPayload), so a manual edit from
+    # the dashboard pencil icon can never get silently overwritten by
+    # the next agent check-in. Defaults to "IMD" for every PC.
+    department: Mapped[str | None] = mapped_column(String(100), server_default="IMD", nullable=True)
+
+    # Set by the background offline-sweep once a PC has been silent
+    # long enough, with peers still online, to be treated as dead/
+    # replaced rather than just offline (see
+    # computer_service.auto_retire_stale_computers). The row is never
+    # deleted - retired PCs are just excluded from the default
+    # dashboard/export views. Cleared automatically the instant this
+    # computer reports in again.
+    is_retired: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
+
+    retired_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
     os_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     os_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
