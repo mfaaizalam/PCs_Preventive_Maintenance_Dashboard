@@ -8,7 +8,7 @@ import {
   fetchPeripheralEvents,
   fetchHardwareChanges,
 } from "../api/agentApi";
-import { useDashboardSocket } from "../context/DashboardSocketContext";
+import useWebSocket from "./useWebSocket";
 
 const EMPTY = {
   ramSlots: [],
@@ -20,14 +20,36 @@ const EMPTY = {
   hardwareChanges: [],
 };
 
-export default function useAgentSections(agentId) {
-  const [sections, setSections] = useState(EMPTY);
-  const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(true);
+const cacheKey = (agentId) => `pm-dashboard:cache:agent-sections:${agentId}`;
 
-  const load = useCallback(async () => {
+function readCache(agentId) {
+  if (!agentId) return null;
+  try {
+    const raw = localStorage.getItem(cacheKey(agentId));
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCache(agentId, data) {
+  if (!agentId) return;
+  try {
+    localStorage.setItem(cacheKey(agentId), JSON.stringify(data));
+  } catch {
+    // ignore
+  }
+}
+
+export default function useAgentSections(agentId) {
+  const [sections, setSections] = useState(() => readCache(agentId) ?? EMPTY);
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(() => readCache(agentId) === null);
+
+  const load = useCallback(async (isBackground = false) => {
     if (!agentId) return;
 
+    if (!isBackground) setLoading(true);
     setError(null);
 
     try {
@@ -49,7 +71,7 @@ export default function useAgentSections(agentId) {
         fetchHardwareChanges(agentId, 50),
       ]);
 
-      setSections({
+      const next = {
         ramSlots,
         storageDevices,
         installedSoftware,
@@ -57,27 +79,34 @@ export default function useAgentSections(agentId) {
         peripherals,
         peripheralEvents,
         hardwareChanges,
-      });
+      };
+
+      setSections(next);
+      writeCache(agentId, next);
     } catch (err) {
       setError(err);
     } finally {
-      setLoading(false);
+      if (!isBackground) setLoading(false);
     }
   }, [agentId]);
 
-  // Initial load
+  // Re-hydrate from cache whenever agentId changes (navigating
+  // between PCs), then refresh underneath.
   useEffect(() => {
-    setLoading(true);
-    load();
-  }, [load]);
+    const cached = readCache(agentId);
+    setSections(cached ?? EMPTY);
+    setLoading(cached === null);
+    load(cached !== null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agentId]);
 
-  // Live updates
-  useDashboardSocket((message) => {
+  // Live updates - always background.
+  useWebSocket("/ws/dashboard", (message) => {
     if (
       message?.type === "computer_updated" &&
       message?.agent_id === agentId
     ) {
-      load();
+      load(true);
     }
   });
 

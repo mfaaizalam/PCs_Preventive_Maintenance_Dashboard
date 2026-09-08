@@ -25,14 +25,35 @@ import { periodLabelFor, recentPeriods } from "../utils/period";
 const COLORS = ["#2563eb", "#16a34a", "#d97706", "#dc2626", "#7c3aed", "#0891b2", "#be185d"];
 const PIE_COLORS = { done: "#16a34a", remaining: "#e5e7eb" };
 
+function summaryCacheKey(frequency, period) {
+  return `pm-dashboard:cache:checklist-summary:${frequency}:${period}`;
+}
+
+function readSummaryCache(frequency, period) {
+  try {
+    const raw = localStorage.getItem(summaryCacheKey(frequency, period));
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeSummaryCache(frequency, period, data) {
+  try {
+    localStorage.setItem(summaryCacheKey(frequency, period), JSON.stringify(data));
+  } catch {
+    // ignore
+  }
+}
+
 export default function ChecklistOverview() {
   const [frequency, setFrequency] = useState("biweekly");
   const currentPeriod = useMemo(() => periodLabelFor(frequency), [frequency]);
   const periods = useMemo(() => recentPeriods(frequency, 8), [frequency]);
   const [period, setPeriod] = useState(currentPeriod);
 
-  const [summary, setSummary] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [summary, setSummary] = useState(() => readSummaryCache(frequency, period));
+  const [loading, setLoading] = useState(() => readSummaryCache(frequency, period) === null);
   const [error, setError] = useState(null);
 
   function handleFrequencyChange(next) {
@@ -42,12 +63,23 @@ export default function ChecklistOverview() {
 
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true);
+    const cached = readSummaryCache(frequency, period);
+
+    // Show whatever's cached for this exact frequency/period combo
+    // right away; only a combo with no cache shows the spinner.
+    setSummary(cached);
+    setLoading(cached === null);
     setError(null);
+
     fetchMaintenanceSummary(frequency, period, controller.signal)
-      .then((data) => !controller.signal.aborted && setSummary(data))
+      .then((data) => {
+        if (controller.signal.aborted) return;
+        setSummary(data);
+        writeSummaryCache(frequency, period, data);
+      })
       .catch((err) => !controller.signal.aborted && setError(err))
       .finally(() => !controller.signal.aborted && setLoading(false));
+
     return () => controller.abort();
   }, [frequency, period]);
 
@@ -86,7 +118,7 @@ export default function ChecklistOverview() {
 
       {loading && !summary ? (
         <LoadingState label="Loading checklist overview…" />
-      ) : error ? (
+      ) : error && !summary ? (
         <ErrorState error={error} onRetry={() => setPeriod((p) => p)} />
       ) : !summary || summary.total_tasks === 0 ? (
         <EmptyState
