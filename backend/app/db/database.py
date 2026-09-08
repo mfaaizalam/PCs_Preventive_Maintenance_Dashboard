@@ -18,9 +18,16 @@ engine = create_engine(
     # Don't wait forever for a free connection - fail fast instead of
     # silently stacking up latency.
     pool_timeout=10,
-    # Recycle connections periodically so Postgres/network idle
-    # timeouts don't hand back a dead connection.
-    pool_recycle=1800,
+    # Neon (serverless Postgres) suspends its compute after a few
+    # minutes of inactivity and silently drops any connection that
+    # was sitting idle when it did. pool_pre_ping catches a dead
+    # connection AT CHECKOUT, but a connection can still die mid-use
+    # if Neon suspends between two queries in the same request.
+    # Recycling every 5 minutes forces SQLAlchemy to open a fresh
+    # connection before Neon's own idle timeout has a chance to kill
+    # the old one - fewer "server closed the connection" errors and
+    # fewer cold-start stalls, though not a 100% guarantee.
+    pool_recycle=300 if not is_sqlite else -1,
     connect_args=(
         {"check_same_thread": False} if is_sqlite else {}
     ),

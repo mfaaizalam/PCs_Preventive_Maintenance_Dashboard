@@ -17,6 +17,32 @@ from app.ws_manager import manager
 
 logger = logging.getLogger("app.cleanup")
 
+# How often we ping the DB just to keep it warm. Neon suspends its
+# compute after a few minutes of inactivity, and every "wake up" is
+# what causes those multi-second request stalls. Pinging well within
+# Neon's suspend window keeps a request coming in often enough that
+# it never gets the chance to suspend. Keep this comfortably shorter
+# than Neon's own auto-suspend timeout (default is 5 minutes).
+DB_KEEPALIVE_INTERVAL_SECONDS = 240
+
+
+def _ping_db():
+    with engine.connect() as connection:
+        connection.execute(text("SELECT 1"))
+
+
+async def _db_keepalive_loop():
+    """Runs forever in the background, just to stop Neon (or any
+    other auto-suspending DB) from going to sleep between real
+    requests."""
+    while True:
+        try:
+            await asyncio.to_thread(_ping_db)
+            logger.info("DB keep-alive ping OK")
+        except Exception:
+            logger.exception("DB keep-alive ping failed")
+
+        await asyncio.sleep(DB_KEEPALIVE_INTERVAL_SECONDS)
 
 async def _offline_sweep_loop():
     """Runs forever in the background, marking stale PCs offline and
@@ -58,9 +84,11 @@ async def _offline_sweep_loop():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    task = asyncio.create_task(_offline_sweep_loop())
+    sweep_task = asyncio.create_task(_offline_sweep_loop())
+    keepalive_task = asyncio.create_task(_db_keepalive_loop())
     yield
-    task.cancel()
+    sweep_task.cancel()
+    keepalive_task.cancel()
 
 
 app = FastAPI(

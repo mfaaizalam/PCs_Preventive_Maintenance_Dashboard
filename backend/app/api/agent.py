@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
@@ -13,10 +14,9 @@ from app.schemas.peripheral_event import PeripheralEventResponse
 from app.schemas.hardware_change_log import HardwareChangeLogResponse
 from app.schemas.notification import HardwareNotificationResponse
 from app.services import computer_service
-from app.ws_manager import manager   # add this import near the top
+from app.ws_manager import manager
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])
-
 
 
 @router.post(
@@ -26,7 +26,9 @@ router = APIRouter(prefix="/api/agent", tags=["agent"])
 )
 async def report(payload: AgentReportPayload, db: Session = Depends(get_db)):
     try:
-        computer = computer_service.ingest_agent_report(db, payload)
+        computer = await asyncio.to_thread(
+            computer_service.ingest_agent_report, db, payload
+        )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
 
@@ -36,6 +38,8 @@ async def report(payload: AgentReportPayload, db: Session = Depends(get_db)):
         "hostname": computer.hostname,
     })
     return computer
+
+
 @router.get(
     "/dashboard",
     response_model=DashboardOverviewResponse,

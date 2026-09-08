@@ -9,9 +9,11 @@ import Maintenance from "./pages/Maintenance";
 import MaintenanceDetail from "./pages/MaintenanceDetail";
 import ChecklistOverview from "./pages/ChecklistOverview";
 import NotFound from "./pages/NotFound";
+import { DashboardSocketProvider } from "./context/DashboardSocketContext";
 
 export default function App() {
   return (
+    <DashboardSocketProvider>
     <AuthProvider>
       <BrowserRouter>
         <Routes>
@@ -33,5 +35,6 @@ export default function App() {
         </Routes>
       </BrowserRouter>
     </AuthProvider>
+    </DashboardSocketProvider>
   );
 }

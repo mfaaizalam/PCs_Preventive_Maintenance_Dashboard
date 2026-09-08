@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchHardwareNotifications } from "../api/agentApi";
-import useWebSocket from "./useWebSocket";
+import { useDashboardSocket } from "../context/DashboardSocketContext";
 
 const LAST_SEEN_STORAGE_KEY =
   "pm-dashboard:hardware-notifications:last-seen-at";
@@ -52,7 +52,7 @@ export default function useHardwareNotifications(pollMs = 60000) {
   }, [load, pollMs]);
 
   // Real-time hardware notification updates
-  useWebSocket("/ws/dashboard", (message) => {
+  useDashboardSocket((message) => {
     if (message?.type === "computer_updated") {
       load();
     }

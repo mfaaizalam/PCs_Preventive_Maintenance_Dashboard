@@ -8,7 +8,7 @@ import {
   fetchPeripheralEvents,
   fetchHardwareChanges,
 } from "../api/agentApi";
-import useWebSocket from "./useWebSocket";
+import { useDashboardSocket } from "../context/DashboardSocketContext";
 
 const EMPTY = {
   ramSlots: [],
@@ -72,7 +72,7 @@ export default function useAgentSections(agentId) {
   }, [load]);
 
   // Live updates
-  useWebSocket("/ws/dashboard", (message) => {
+  useDashboardSocket((message) => {
     if (
       message?.type === "computer_updated" &&
       message?.agent_id === agentId
