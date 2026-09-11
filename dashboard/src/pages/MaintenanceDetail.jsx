@@ -5,9 +5,11 @@ import useChecklist from "../hooks/useChecklist";
 import LoadingState from "../components/common/LoadingState";
 import ErrorState from "../components/common/ErrorState";
 import EmptyState from "../components/common/EmptyState";
+import ConfirmDialog from "../components/common/ConfirmDialog";
 import FrequencyTabs from "../components/maintenance/FrequencyTabs";
 import PeriodSelector from "../components/maintenance/PeriodSelector";
 import ChecklistTable from "../components/maintenance/ChecklistTable";
+import PCMaintenanceProgress from "../components/maintenance/PCMaintenanceProgress";
 import PrintExportButton from "../components/maintenance/PrintExportButton";
 import { useAuth } from "../auth/AuthContext";
 import { periodLabelFor, recentPeriods } from "../utils/period";
@@ -20,8 +22,8 @@ export default function MaintenanceDetail() {
   const currentPeriod = useMemo(() => periodLabelFor(frequency), [frequency]);
   const periods = useMemo(() => recentPeriods(frequency, 8), [frequency]);
   const [period, setPeriod] = useState(currentPeriod);
+  const [dialog, setDialog] = useState(null);
 
-  // Reset to the current period whenever the frequency tab changes.
   function handleFrequencyChange(next) {
     setFrequency(next);
     setPeriod(periodLabelFor(next));
@@ -33,14 +35,42 @@ export default function MaintenanceDetail() {
     frequency
   );
 
-  // Ticking attributes the check to whoever is logged in — no name
-  // prompt needed. Unticking clears completed_by along with it.
-  async function handleToggle(item) {
-    toggleTask(item, item.completed ? null : user?.name ?? null);
+  function handleToggle(item) {
+    const responsible = item.responsible_person?.trim();
+    const isMine = !responsible || responsible.toLowerCase() === user?.name?.toLowerCase();
+
+    if (!isMine) {
+      setDialog({
+        tone: "blocked",
+        title: "Not your task",
+        description: `"${item.task_name}" is assigned to ${responsible}. Only they (or an IT Manager) can check it off - ask them to tick it, or log in as them if that's you.`,
+      });
+      return;
+    }
+
+    setDialog({
+      tone: "confirm",
+      title: item.completed ? "Mark as not done?" : "Mark as done?",
+      description: item.completed
+        ? `This will un-tick "${item.task_name}" for this period.`
+        : `This will tick "${item.task_name}" as completed by ${user?.name ?? "you"} for this period.`,
+      confirmLabel: item.completed ? "Mark not done" : "Mark done",
+      onConfirm: () => toggleTask(item, item.completed ? null : user?.name ?? null),
+    });
   }
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
+      <ConfirmDialog
+        open={!!dialog}
+        title={dialog?.title}
+        description={dialog?.description}
+        confirmLabel={dialog?.confirmLabel}
+        tone={dialog?.tone}
+        onConfirm={dialog?.onConfirm}
+        onClose={() => setDialog(null)}
+      />
+
       <Link
         to="/maintenance"
         className="inline-flex items-center gap-1.5 text-sm font-medium text-ink-400 hover:text-brand-700"
@@ -102,13 +132,21 @@ export default function MaintenanceDetail() {
               description="No maintenance tasks in the catalog are set to this frequency yet."
             />
           ) : (
-            <ChecklistTable
-              checklist={view.checklist}
-              frequency={frequency}
-              period={period}
-              savingTaskId={savingTaskId}
-              onToggle={handleToggle}
-            />
+            <>
+              <PCMaintenanceProgress
+                checklist={view.checklist}
+                frequency={frequency}
+                period={period}
+                computerId={view.computer_id}
+              />
+              <ChecklistTable
+                checklist={view.checklist}
+                frequency={frequency}
+                period={period}
+                savingTaskId={savingTaskId}
+                onToggle={handleToggle}
+              />
+            </>
           )}
         </>
       ) : null}

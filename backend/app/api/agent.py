@@ -32,12 +32,21 @@ async def report(payload: AgentReportPayload, db: Session = Depends(get_db)):
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
 
-    await manager.broadcast({
+    asyncio.create_task(manager.broadcast({
         "type": "computer_updated",
         "agent_id": computer.agent_id,
         "hostname": computer.hostname,
-    })
+    }))
     return computer
+
+
+@router.post(
+    "/{agent_id}/shutdown-ack",
+    status_code=204,
+    summary="Agent calls this right after telling the OS to shut down, to clear the pending flag",
+)
+async def acknowledge_shutdown(agent_id: str, db: Session = Depends(get_db)):
+    await asyncio.to_thread(computer_service.ack_shutdown, db, agent_id)
 
 
 @router.get(
@@ -48,8 +57,6 @@ async def report(payload: AgentReportPayload, db: Session = Depends(get_db)):
 def get_dashboard(db: Session = Depends(get_db)):
     return computer_service.get_dashboard_overview(db)
 
-
-# Bell-icon hardware notifications (device-removed events, all PCs)
 
 @router.get(
     "/notifications/hardware",

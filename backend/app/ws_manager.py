@@ -1,14 +1,6 @@
 """
 In-memory WebSocket connection manager for pushing live updates to the
 dashboard.
-
-IMPORTANT - single-process assumption:
-This keeps connected sockets in a plain Python set living inside ONE
-running uvicorn process. That's fine for one backend process on one
-server PC (your deployment). Don't run `uvicorn --workers 2+`, and
-don't run two independent backend processes behind a load balancer,
-unless you also add a shared broker (e.g. Redis pub/sub) so every
-process knows about every connected browser.
 """
 
 import asyncio
@@ -19,6 +11,8 @@ from typing import Any
 from fastapi import WebSocket
 
 logger = logging.getLogger("app.ws")
+
+SEND_TIMEOUT_SECONDS = 3
 
 
 class ConnectionManager:
@@ -38,9 +32,6 @@ class ConnectionManager:
         logger.info("WS client disconnected (total=%d)", len(self._connections))
 
     async def broadcast(self, message: dict[str, Any]) -> None:
-        """Send a JSON message to every connected dashboard. A socket
-        that fails to receive it (closed tab, network blip, etc.) is
-        dropped instead of breaking the whole broadcast."""
         if not self._connections:
             return
 
@@ -52,7 +43,7 @@ class ConnectionManager:
         dead: list[WebSocket] = []
         for ws in targets:
             try:
-                await ws.send_text(payload)
+                await asyncio.wait_for(ws.send_text(payload), timeout=SEND_TIMEOUT_SECONDS)
             except Exception:
                 dead.append(ws)
 
@@ -62,6 +53,4 @@ class ConnectionManager:
                     self._connections.discard(ws)
 
 
-# Single shared instance - import this from anywhere that needs to
-# broadcast (e.g. app/api/agent.py after a report is saved).
 manager = ConnectionManager()

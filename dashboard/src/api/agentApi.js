@@ -4,6 +4,10 @@ export function fetchDashboardOverview(signal) {
   return client.get("/api/agent/dashboard", { signal }).then((res) => res.data);
 }
 
+export function acknowledgeAlert(alertId) {
+  return client.post(`/api/alerts/${alertId}/acknowledge`).then((res) => res.data);
+}
+
 export function fetchHardwareNotifications(hours = 24, signal) {
   return client
     .get("/api/agent/notifications/hardware", { params: { hours }, signal })

@@ -10,19 +10,15 @@ from app.db.database import engine, SessionLocal
 from app.api.agent import router as agent_router
 from app.api.maintenance import router as maintenance_router
 from app.api.computers import router as computers_router
+from app.api.alerts import router as alerts_router
 from app.api.ws import router as ws_router
 from app.services.computer_service import auto_retire_stale_computers, mark_stale_computers_offline
+from app.services import retention_service
 from app.ws_manager import manager
 
 
 logger = logging.getLogger("app.cleanup")
 
-# How often we ping the DB just to keep it warm. Neon suspends its
-# compute after a few minutes of inactivity, and every "wake up" is
-# what causes those multi-second request stalls. Pinging well within
-# Neon's suspend window keeps a request coming in often enough that
-# it never gets the chance to suspend. Keep this comfortably shorter
-# than Neon's own auto-suspend timeout (default is 5 minutes).
 DB_KEEPALIVE_INTERVAL_SECONDS = 240
 
 
@@ -32,9 +28,6 @@ def _ping_db():
 
 
 async def _db_keepalive_loop():
-    """Runs forever in the background, just to stop Neon (or any
-    other auto-suspending DB) from going to sleep between real
-    requests."""
     while True:
         try:
             await asyncio.to_thread(_ping_db)
@@ -45,8 +38,6 @@ async def _db_keepalive_loop():
         await asyncio.sleep(DB_KEEPALIVE_INTERVAL_SECONDS)
 
 async def _offline_sweep_loop():
-    """Runs forever in the background, marking stale PCs offline and
-    notifying connected dashboards over the websocket."""
     while True:
         try:
             db = SessionLocal()
@@ -82,13 +73,29 @@ async def _offline_sweep_loop():
         await asyncio.sleep(settings.OFFLINE_SWEEP_INTERVAL_SECONDS)
 
 
+async def _retention_sweep_loop():
+    while True:
+        try:
+            db = SessionLocal()
+            try:
+                await asyncio.to_thread(retention_service.run_retention_sweep, db)
+            finally:
+                db.close()
+        except Exception:
+            logger.exception("Retention sweep failed")
+
+        await asyncio.sleep(settings.RETENTION_SWEEP_INTERVAL_SECONDS)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     sweep_task = asyncio.create_task(_offline_sweep_loop())
     keepalive_task = asyncio.create_task(_db_keepalive_loop())
+    retention_task = asyncio.create_task(_retention_sweep_loop())
     yield
     sweep_task.cancel()
     keepalive_task.cancel()
+    retention_task.cancel()
 
 
 app = FastAPI(
@@ -102,6 +109,7 @@ app = FastAPI(
 app.include_router(agent_router)
 app.include_router(maintenance_router)
 app.include_router(computers_router)
+app.include_router(alerts_router)
 app.include_router(ws_router)
 
 

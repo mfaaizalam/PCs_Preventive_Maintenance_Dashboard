@@ -52,10 +52,6 @@ class Computer(Base, TimestampMixin):
         nullable=False,
     )
 
-    # Serial number for the maintenance master list (S.No column in
-    # the Excel). Nullable + admin-assigned - agents never set this,
-    # it's purely for matching the department's existing paper/Excel
-    # numbering, assigned once when a PC is added to the checklist.
     s_no: Mapped[int | None] = mapped_column(
         Integer,
         unique=True,
@@ -69,19 +65,8 @@ class Computer(Base, TimestampMixin):
 
     lab_section: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
-    # Admin-editable only - agents never report this (it's not in
-    # DIRECT_ASSIGN_FIELDS / AgentReportPayload), so a manual edit from
-    # the dashboard pencil icon can never get silently overwritten by
-    # the next agent check-in. Defaults to "IMD" for every PC.
     department: Mapped[str | None] = mapped_column(String(100), server_default="IMD", nullable=True)
 
-    # Set by the background offline-sweep once a PC has been silent
-    # long enough, with peers still online, to be treated as dead/
-    # replaced rather than just offline (see
-    # computer_service.auto_retire_stale_computers). The row is never
-    # deleted - retired PCs are just excluded from the default
-    # dashboard/export views. Cleared automatically the instant this
-    # computer reports in again.
     is_retired: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
 
     retired_at: Mapped[datetime | None] = mapped_column(
@@ -118,6 +103,18 @@ class Computer(Base, TimestampMixin):
     is_online: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     last_seen: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    # ------------------------------------------------------------------
+    # REMOTE SHUTDOWN
+    # ------------------------------------------------------------------
+    pending_shutdown: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    shutdown_requested_by: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+    shutdown_requested_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
     )

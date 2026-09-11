@@ -1,9 +1,5 @@
 """
 Pure HTTP layer between the agent and the central monitoring backend.
-
-This module knows nothing about WMI, psutil, or the registry - it just
-takes an already-built payload dict and tries to deliver it, with
-retries. Collection/transformation logic lives in agent.py.
 """
 
 import logging
@@ -17,17 +13,6 @@ logger = logging.getLogger("agent.api_client")
 
 
 def send_report(payload: dict) -> dict | None:
-    """
-    POST a single agent report to the backend.
-
-    Retries a few times on connection/timeout errors. If the backend
-    is unreachable for this whole cycle, gives up cleanly - the next
-    scheduled report in agent.py will simply try again in 60s.
-
-    Returns the parsed JSON response (the updated Computer record) on
-    success, or None on failure.
-    """
-
     last_error = None
 
     for attempt in range(1, config.MAX_RETRIES + 1):
@@ -86,3 +71,11 @@ def send_report(payload: dict) -> dict | None:
         last_error,
     )
     return None
+
+
+def send_shutdown_ack(agent_id: str) -> None:
+    try:
+        url = config.AGENT_SHUTDOWN_ACK_URL_TEMPLATE.format(agent_id=agent_id)
+        requests.post(url, timeout=5)
+    except requests.exceptions.RequestException as exc:
+        logger.warning("Could not send shutdown ack (shutting down anyway): %s", exc)

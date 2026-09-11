@@ -21,17 +21,14 @@ function writeCache(data) {
   }
 }
 
-/**
- * Loads GET /api/agent/dashboard and keeps it live via the
- * /ws/dashboard WebSocket. On mount it shows whatever was cached
- * from the last successful load (instant, no spinner) and only
- * shows a spinner if there's truly nothing to show yet.
- */
+const SOCKET_REFRESH_DEBOUNCE_MS = 1500;
+
 export default function useDashboardData(pollMs = 60000) {
   const [data, setData] = useState(() => readCache());
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(() => readCache() === null);
   const controllerRef = useRef(null);
+  const debounceRef = useRef(null);
 
   const load = useCallback(async (isBackground = false) => {
     controllerRef.current?.abort();
@@ -54,17 +51,16 @@ export default function useDashboardData(pollMs = 60000) {
   }, []);
 
   useDashboardSocket(() => {
-    load(true);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => load(true), SOCKET_REFRESH_DEBOUNCE_MS);
   });
 
   useEffect(() => {
-    // If we already had cached data, the very first fetch on this
-    // mount is treated as a background refresh too - the cached
-    // snapshot stays on screen until the real response arrives.
     load(readCache() !== null);
     const id = setInterval(() => load(true), pollMs);
     return () => {
       clearInterval(id);
+      clearTimeout(debounceRef.current);
       controllerRef.current?.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

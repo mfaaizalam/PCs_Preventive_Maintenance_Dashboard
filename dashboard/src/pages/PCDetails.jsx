@@ -17,7 +17,7 @@ export default function PCDetails() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <PCDetailHeader computer={computer} />
+      <PCDetailHeader computer={computer} onRefresh={refresh} />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.3fr_1fr]">
         <SpecsPanel computer={computer} />

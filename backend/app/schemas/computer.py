@@ -36,14 +36,6 @@ class ComputerCreate(ComputerBase):
 
 
 class ComputerMetadataUpdate(BaseModel):
-    """
-    Shape for the dashboard's pencil-icon edit (PATCH
-    /api/computers/{id}). Deliberately narrow - only the fields an
-    admin is meant to hand-correct from the UI, never the
-    agent-reported metrics/hardware fields. All optional: send only
-    the field(s) you're changing.
-    """
-
     department: str | None = Field(default=None, max_length=100)
     lab_section: str | None = Field(default=None, max_length=100)
     asset_id: str | None = Field(default=None, max_length=50)
@@ -79,6 +71,9 @@ class ComputerResponse(ComputerBase, TimestampSchema, ORMModel):
     id: int
     is_retired: bool = False
     retired_at: datetime | None = None
+    pending_shutdown: bool = False
+    shutdown_requested_by: str | None = None
+    shutdown_requested_at: datetime | None = None
 
 
 class ComputerSummaryResponse(ORMModel):
@@ -98,7 +93,25 @@ class ComputerSummaryResponse(ORMModel):
     disk_usage_percent: float | None
     uptime_seconds: int | None = None
     last_seen: datetime | None
-    # Last 3 days of hardware connect/disconnect activity for this PC
-    # (most recent first, capped). Populated by
-    # computer_service.get_dashboard_overview - not a DB column.
+    pending_shutdown: bool = False
+    shutdown_requested_by: str | None = None
+    shutdown_requested_at: datetime | None = None
     recent_hardware_events: list[HardwareEventBrief] = Field(default_factory=list)
+
+
+class ShutdownRequest(BaseModel):
+    requested_by: str = Field(..., max_length=200, description="Name of whoever triggered this")
+
+
+class ShutdownResponse(ORMModel):
+    id: int
+    hostname: str
+    pending_shutdown: bool
+    shutdown_requested_by: str | None = None
+    shutdown_requested_at: datetime | None = None
+
+
+class LabShutdownResponse(BaseModel):
+    lab_section: str
+    requested_count: int
+    computers: list[ShutdownResponse]

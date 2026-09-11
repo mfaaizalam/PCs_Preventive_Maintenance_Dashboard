@@ -1,4 +1,6 @@
 import logging
+import subprocess
+import sys
 import time
 import uuid
 from datetime import datetime, timezone
@@ -9,7 +11,7 @@ from collectors.licenses import get_license_info
 from collectors.peripherals import get_peripherals
 from collectors.software import get_software_inventory
 from collectors.system import get_system_info
-from services.api_client import send_report
+from services.api_client import send_report, send_shutdown_ack
 from collectors.hardware import get_system_uuid
 import psutil 
 logging.basicConfig(
@@ -18,10 +20,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger("agent")
 
-
-# ============================================================
-# AGENT IDENTITY
-# ============================================================
 
 def get_or_create_agent_id() -> str:
     os.makedirs(config.AGENT_ID_DIR, exist_ok=True)
@@ -42,10 +40,6 @@ def get_or_create_agent_id() -> str:
     return agent_id
 
 
-# ============================================================
-# RAW COLLECTION
-# ============================================================
-
 def collect_raw() -> dict:
     return {
         "system": get_system_info(),
@@ -55,10 +49,6 @@ def collect_raw() -> dict:
         "software": get_software_inventory(),
     }
 
-
-# ============================================================
-# MAPPING HELPERS: raw collector output -> AgentReportPayload shape
-# ============================================================
 
 def _map_storage_device_type(media_type: str | None) -> str:
     if not media_type:
@@ -93,7 +83,7 @@ def _map_peripheral_type(device_type: str | None) -> str:
         "touchpad": "mouse",
         "physical_printer": "printer",
         "virtual_printer": "printer",
-        "bluetooth_speaker": "headset",       # closest match in enum
+        "bluetooth_speaker": "headset",
         "external_ssd": "usb_storage",
         "external_storage": "usb_storage",
     }
@@ -243,10 +233,6 @@ def _build_installed_software(software_list: list[dict]) -> list[dict]:
     ]
 
 
-# ============================================================
-# BUILD FULL PAYLOAD (matches AgentReportPayload schema)
-# ============================================================
-
 def build_report_payload(agent_id: str, raw: dict, hardware_uuid: str | None) -> dict:
     system = raw["system"]
     hardware = raw["hardware"]
@@ -305,14 +291,33 @@ def build_report_payload(agent_id: str, raw: dict, hardware_uuid: str | None) ->
     }
 
 
-# ============================================================
-# MAIN LOOP - runs forever, one report every REPORT_INTERVAL_SECONDS
-# ============================================================
+def trigger_shutdown(agent_id: str) -> None:
+    logger.warning(
+        "Remote shutdown received - powering off in %ss",
+        config.SHUTDOWN_GRACE_SECONDS,
+    )
+    try:
+        subprocess.run(
+            [
+                "shutdown",
+                "/s",
+                "/t", str(config.SHUTDOWN_GRACE_SECONDS),
+                "/c", "Remote shutdown requested from the Lab Monitoring dashboard.",
+            ],
+            check=True,
+        )
+    except Exception:
+        logger.exception("Failed to invoke Windows shutdown")
+        return
+
+    send_shutdown_ack(agent_id)
+    sys.exit(0)
+
+
 def run_forever():
     agent_id = get_or_create_agent_id()
     psutil.cpu_percent(interval=None)
 
-    # Static for the life of the process - computed once, not every cycle.
     hardware_uuid = get_system_uuid()
 
     logger.info(
@@ -357,6 +362,8 @@ def run_forever():
                     result.get("id"),
                     result.get("status"),
                 )
+                if result.get("pending_shutdown"):
+                    trigger_shutdown(agent_id)
 
         except Exception:
             logger.exception("Unexpected error during collection/report cycle")
