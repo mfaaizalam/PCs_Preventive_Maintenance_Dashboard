@@ -1090,6 +1090,7 @@ def get_dashboard_overview(
     recent_alerts = (
         db.query(Alert)
         .filter(
+            Alert.is_acknowledged.is_(False),
             Alert.resolved_at.is_(None)
         )
         .order_by(

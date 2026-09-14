@@ -66,5 +66,11 @@ export default function useDashboardData(pollMs = 60000) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pollMs]);
 
-  return { data, error, loading, refresh: () => load(false) };
+ return {
+  data,
+  error,
+  loading,
+  refresh: () => load(false),          // full loading spinner wala refresh (jab chahiye ho tab hi use karo)
+  refreshSilent: () => load(true),     // background refresh, loading=true nahi hoga
+};
 }

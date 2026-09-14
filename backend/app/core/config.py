@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     # How often the retention sweep runs. Once an hour is plenty -
     # this is cleanup, not anything time-critical.
     RETENTION_SWEEP_INTERVAL_SECONDS: int = 3600
+    
+        # How many days before a half-year purge do we start showing the
+    # "data about to be deleted" reminder banner on the dashboard.
+    MAINTENANCE_LOG_REMINDER_DAYS: int = 2
 
     # ------------------------------------------------------------------
     # REMOTE SHUTDOWN
