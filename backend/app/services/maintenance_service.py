@@ -70,6 +70,54 @@ def get_checklist(
     return checklist
 
 
+def get_checklists_for_computers(
+    db: Session,
+    computer_ids: list[int],
+    period_label: str,
+    frequency: str | None = None,
+) -> dict[int, list[dict]]:
+    """Load the same checklist shape for many computers without N+1 queries."""
+    tasks = list_tasks(db, frequency=frequency)
+    checklists = {computer_id: [] for computer_id in computer_ids}
+    if not computer_ids:
+        return checklists
+
+    logs = (
+        db.query(MaintenanceLog)
+        .filter(
+            MaintenanceLog.computer_id.in_(computer_ids),
+            MaintenanceLog.period_label == period_label,
+        )
+        .all()
+    )
+    logs_by_computer_task = {
+        (log.computer_id, log.maintenance_task_id): log for log in logs
+    }
+
+    for computer_id in computer_ids:
+        checklists[computer_id] = [
+            {
+                "task_id": task.id,
+                "task_name": task.name,
+                "frequency": task.default_frequency,
+                "responsible_person": task.responsible_person,
+                "period_label": period_label,
+                "log_id": (
+                    log.id
+                    if (log := logs_by_computer_task.get((computer_id, task.id)))
+                    else None
+                ),
+                "completed": log.completed if log else False,
+                "completed_by": log.completed_by if log else None,
+                "completed_at": log.completed_at if log else None,
+                "notes": log.notes if log else None,
+            }
+            for task in tasks
+        ]
+
+    return checklists
+
+
 def toggle_maintenance_log(
     db: Session,
     computer_id: int,

@@ -214,6 +214,12 @@ def build_single_computer_workbook(
 
 def build_whole_lab_workbook(db: Session, frequency: str, period_label: str) -> io.BytesIO:
     computers = maintenance_service.list_computers_for_maintenance(db)
+    checklists = maintenance_service.get_checklists_for_computers(
+        db,
+        [computer.id for computer in computers],
+        period_label,
+        frequency,
+    )
 
     wb = Workbook()
     ws = wb.active
@@ -239,8 +245,14 @@ def build_whole_lab_workbook(db: Session, frequency: str, period_label: str) -> 
             section_cell.fill = SECTION_FILL
             row += 1
 
-        checklist = maintenance_service.get_checklist(db, computer.id, period_label, frequency)
-        row = _write_computer_block(ws, row, computer, checklist, frequency, period_label)
+        row = _write_computer_block(
+            ws,
+            row,
+            computer,
+            checklists[computer.id],
+            frequency,
+            period_label,
+        )
 
     ws.freeze_panes = "A1"
     _apply_column_widths(ws)
