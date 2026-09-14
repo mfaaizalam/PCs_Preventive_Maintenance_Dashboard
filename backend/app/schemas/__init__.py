@@ -55,7 +55,7 @@ from app.schemas.storage_device import (
     StorageDeviceUpdate,
     StorageDeviceUpsert,
 )
-from app.schemas.user import TokenResponse, UserCreate, UserLogin, UserResponse, UserUpdate
+from app.schemas.user import ChangePasswordRequest, TokenResponse, UserLogin, UserResponse
 
 __all__ = [
     "AgentReportPayload",

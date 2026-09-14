@@ -8,20 +8,23 @@ export default function Login() {
   const { user, login } = useAuth();
   const location = useLocation();
   const [userId, setUserId] = useState(USERS[0].id);
-  const [pin, setPin] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   if (user) {
     const redirectTo = location.state?.from ?? "/";
     return <Navigate to={redirectTo} replace />;
   }
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
-    const result = login(userId, pin);
+    setSubmitting(true);
+    const result = await login(userId, password);
+    setSubmitting(false);
     if (!result.ok) {
       setError(result.error);
-      setPin("");
+      setPassword("");
     }
   }
 
@@ -55,16 +58,15 @@ export default function Login() {
           </div>
 
           <div>
-            <label className="block text-[12px] font-medium text-ink-500">PIN</label>
+            <label className="block text-[12px] font-medium text-ink-500">Password</label>
             <div className="relative mt-1">
               <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-300" />
               <input
                 autoFocus
                 type="password"
-                inputMode="numeric"
-                value={pin}
-                onChange={(e) => setPin(e.target.value)}
-                placeholder="••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
                 className="w-full rounded-lg border border-ink-200 bg-white py-2 pl-9 pr-3 text-sm text-ink-800 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
               />
             </div>
@@ -74,9 +76,10 @@ export default function Login() {
 
           <button
             type="submit"
-            className="w-full rounded-lg bg-brand-700 px-3.5 py-2 text-sm font-medium text-white hover:bg-brand-800"
+            disabled={submitting}
+            className="w-full rounded-lg bg-brand-700 px-3.5 py-2 text-sm font-medium text-white hover:bg-brand-800 disabled:opacity-60"
           >
-            Sign in
+            {submitting ? "Signing in…" : "Sign in"}
           </button>
         </form>
       </div>

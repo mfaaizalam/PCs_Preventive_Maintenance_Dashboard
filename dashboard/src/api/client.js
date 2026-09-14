@@ -19,6 +19,19 @@ const client = axios.create({
   },
 });
 
+// Key used to persist the auth JWT in localStorage. Exported so
+// AuthContext can read/write it without duplicating the string.
+export const TOKEN_STORAGE_KEY = "pm-dashboard.token";
+
+// Attaches the saved JWT (if any) to every outgoing request.
+client.interceptors.request.use((config) => {
+  const token = localStorage.getItem(TOKEN_STORAGE_KEY);
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 // Normalizes Axios/network errors into a small, predictable shape so
 // every page can render the same kind of error state instead of each
 // screen having to know about Axios internals.

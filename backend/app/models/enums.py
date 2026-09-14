@@ -88,14 +88,10 @@ class MaintenanceFrequency(str, enum.Enum):
     QUARTERLY = "quarterly"
     CUSTOM = "custom"
 
-
 class UserRole(str, enum.Enum):
-    ADMIN = "admin"
-    OPERATOR = "operator"
-    LAB_STAFF = "lab_staff"
-    VIEWER = "viewer"
-    AUDITOR = "auditor"
-
+    IT_MANAGER = "it-manager"
+    IT_SUPPORT = "it-support"
+    LAB_STAFF = "lab-staff"
 
 class HardwareChangeType(str, enum.Enum):
     RAM = "ram"

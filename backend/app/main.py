@@ -15,7 +15,7 @@ from app.api.ws import router as ws_router
 from app.services.computer_service import auto_retire_stale_computers, mark_stale_computers_offline
 from app.services import retention_service
 from app.ws_manager import manager
-
+from app.api.auth import router as auth_router
 
 logger = logging.getLogger("app.cleanup")
 
@@ -105,7 +105,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-
+app.include_router(auth_router)
 app.include_router(agent_router)
 app.include_router(maintenance_router)
 app.include_router(computers_router)

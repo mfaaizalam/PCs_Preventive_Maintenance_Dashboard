@@ -4,6 +4,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./maintenance.db"
 
+
+    SECRET_KEY: str = "CHANGE_THIS_TO_A_LONG_RANDOM_SECRET_KEY"
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
     # If a PC hasn't reported in this many seconds, the sweep marks
     # it offline. Should be a few multiples of the agent's fast report
     # interval (10s) to tolerate one or two missed/slow cycles.

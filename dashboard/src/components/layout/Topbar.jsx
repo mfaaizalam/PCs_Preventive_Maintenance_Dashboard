@@ -1,9 +1,12 @@
-import { Menu, Circle, LogOut, UserCircle2 } from "lucide-react";
+import { useState } from "react";
+import { Menu, Circle, LogOut, UserCircle2, KeyRound } from "lucide-react";
 import { useAuth } from "../../auth/AuthContext";
 import NotificationBell from "../common/NotificationBell";
+import ChangePasswordModal from "../auth/ChangePasswordModal";
 
 export default function Topbar({ onMenuClick, connectionOk }) {
   const { user, logout } = useAuth();
+  const [showChangePassword, setShowChangePassword] = useState(false);
 
   return (
     <header className="flex items-center justify-between border-b border-ink-100 bg-white px-4 py-3 sm:px-6">
@@ -28,7 +31,17 @@ export default function Topbar({ onMenuClick, connectionOk }) {
         {user && (
           <div className="flex items-center gap-2">
             <UserCircle2 className="h-5 w-5 text-ink-400" />
-            <span className="text-sm text-ink-600">{user.username || user.email}</span>
+            <span className="text-sm text-ink-600">{user.name || user.username}</span>
+
+            <button
+              onClick={() => setShowChangePassword(true)}
+              className="rounded-md p-1.5 text-ink-400 hover:bg-ink-50 hover:text-ink-700"
+              aria-label="Change password"
+              title="Change password"
+            >
+              <KeyRound className="h-4 w-4" />
+            </button>
+
             <button
               onClick={logout}
               className="rounded-md p-1.5 text-ink-400 hover:bg-ink-50 hover:text-ink-700"
@@ -40,6 +53,11 @@ export default function Topbar({ onMenuClick, connectionOk }) {
           </div>
         )}
       </div>
+
+      <ChangePasswordModal
+        open={showChangePassword}
+        onClose={() => setShowChangePassword(false)}
+      />
     </header>
   );
 }

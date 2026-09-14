@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { USERS } from "./users";
-
-const STORAGE_KEY = "pm-dashboard.session-user-id";
+import { authApi } from "../api/auth";
+import { TOKEN_STORAGE_KEY } from "../api/client";
 
 const AuthContext = createContext(null);
 
@@ -9,34 +9,66 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [ready, setReady] = useState(false);
 
-  // Restore the session on reload so ticking a checklist item
-  // doesn't require logging in again every time the tab refreshes.
+  // Restore the session on reload by validating the saved token
+  // against the backend (client.js interceptor attaches it).
   useEffect(() => {
-    const savedId = localStorage.getItem(STORAGE_KEY);
-    if (savedId) {
-      const match = USERS.find((u) => u.id === savedId);
-      if (match) setUser(match);
+    let cancelled = false;
+
+    async function restore() {
+      const token = localStorage.getItem(TOKEN_STORAGE_KEY);
+      if (!token) {
+        setReady(true);
+        return;
+      }
+      try {
+        const me = await authApi.me();
+        if (!cancelled) {
+          const match = USERS.find((u) => u.id === me.role) ?? { id: me.role, name: me.role };
+          setUser({ ...match, ...me });
+        }
+      } catch {
+        localStorage.removeItem(TOKEN_STORAGE_KEY);
+        if (!cancelled) setUser(null);
+      } finally {
+        if (!cancelled) setReady(true);
+      }
     }
-    setReady(true);
+
+    restore();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const login = useCallback((userId, pin) => {
-    const match = USERS.find((u) => u.id === userId);
-    if (!match || match.pin !== pin) {
-      return { ok: false, error: "Wrong PIN. Try again." };
+  const login = useCallback(async (userId, password) => {
+    try {
+      const result = await authApi.login(userId, password); // { access_token, role }
+      localStorage.setItem(TOKEN_STORAGE_KEY, result.access_token);
+      const me = await authApi.me();
+      const match = USERS.find((u) => u.id === me.role) ?? { id: me.role, name: me.role };
+      setUser({ ...match, ...me });
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message || "Wrong password. Try again." };
     }
-    localStorage.setItem(STORAGE_KEY, match.id);
-    setUser(match);
-    return { ok: true };
   }, []);
 
   const logout = useCallback(() => {
-    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
     setUser(null);
   }, []);
 
+  const changePassword = useCallback(async (oldPassword, newPassword) => {
+    try {
+      await authApi.changePassword(oldPassword, newPassword);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message || "Could not change password" };
+    }
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, ready, login, logout }}>
+    <AuthContext.Provider value={{ user, ready, login, logout, changePassword }}>
       {children}
     </AuthContext.Provider>
   );
