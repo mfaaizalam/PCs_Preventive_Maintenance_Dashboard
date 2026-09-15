@@ -951,6 +951,7 @@ def _generate_threshold_alert(
     if existing:
         existing.severity = severity
         existing.message = message
+        existing.created_at = datetime.now(timezone.utc)
 
     else:
         db.add(
@@ -1434,10 +1435,10 @@ def mark_stale_computers_offline(
     return stale
 
 
-def acknowledge_alert(
+def delete_alert(
     db: Session,
     alert_id: int,
-) -> Alert:
+) -> None:
 
     alert = (
         db.query(Alert)
@@ -1450,10 +1451,8 @@ def acknowledge_alert(
             f"Alert {alert_id} not found"
         )
 
-    alert.is_acknowledged = True
-    alert.acknowledged_at = (
-        datetime.now(timezone.utc)
-    )
+    db.delete(alert)
+    db.commit()
 
     db.commit()
     db.refresh(alert)

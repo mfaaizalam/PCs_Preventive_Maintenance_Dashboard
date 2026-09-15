@@ -14,14 +14,14 @@ TASKS = [
     # (name, frequency, responsible_person)
     ("Clean keyboards & mouse", MaintenanceFrequency.BIWEEKLY, "Lab Staff"),
     ("Check system boot-up", MaintenanceFrequency.BIWEEKLY, "Lab Staff"),
-    ("Empty recycle bin", MaintenanceFrequency.BIWEEKLY, "IT-Support"),
-    ("Run (OS) updates", MaintenanceFrequency.BIWEEKLY, "IT-Support"),
+    ("Empty recycle bin", MaintenanceFrequency.BIWEEKLY, "IT Support"),
+    ("Run (OS) updates", MaintenanceFrequency.BIWEEKLY, "IT Support"),
     ("Maintenance (any if required)", MaintenanceFrequency.MONTHLY, "IT Support"),
-    ("Update/refresh OS", MaintenanceFrequency.HALF_YEARLY, "IT-Support"),
-    ("Remove unused software/required software", MaintenanceFrequency.HALF_YEARLY, "IT-Support"),
-    ("Review security passwords", MaintenanceFrequency.HALF_YEARLY, "IT-Manager"),
-    ("Review software licenses/warranties", MaintenanceFrequency.HALF_YEARLY, "IT-Support"),
-    ("Health check (RAM, HDD/SSD) - upgrade old components", MaintenanceFrequency.HALF_YEARLY, "IT-Manager"),
+    ("Update/refresh OS", MaintenanceFrequency.HALF_YEARLY, "IT Support"),
+    ("Remove unused software/required software", MaintenanceFrequency.HALF_YEARLY, "IT Support"),
+    ("Review security passwords", MaintenanceFrequency.HALF_YEARLY, "IT Manager"),
+    ("Review software licenses/warranties", MaintenanceFrequency.HALF_YEARLY, "IT Support"),
+    ("Health check (RAM, HDD/SSD) - upgrade old components", MaintenanceFrequency.HALF_YEARLY, "IT Manager"),
 ]
 
 
