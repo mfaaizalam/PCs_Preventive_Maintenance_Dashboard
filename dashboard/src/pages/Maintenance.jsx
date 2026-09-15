@@ -6,6 +6,7 @@ import LoadingState from "../components/common/LoadingState";
 import ErrorState from "../components/common/ErrorState";
 import EmptyState from "../components/common/EmptyState";
 import ComputerSeat from "../components/maintenance/ComputerSeat";
+import RetentionReminderBanner from "../components/maintenance/RetentionReminderBanner";
 
 const LEGEND = [
   { key: "healthy", label: "Healthy", dot: "bg-signal-healthy" },
@@ -54,6 +55,7 @@ export default function Maintenance() {
 
   return (
     <div className="space-y-6">
+       <RetentionReminderBanner />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 font-display text-2xl font-semibold text-ink-900">

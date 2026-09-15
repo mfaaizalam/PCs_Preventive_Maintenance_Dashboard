@@ -16,7 +16,7 @@ import { filterComputers, sortComputers } from "../utils/pcFilters";
 import { formatDateTime } from "../utils/format";
 
 export default function Dashboard() {
-  const { data, error, loading, refresh } = useDashboardData();
+  const { data, error, loading, refresh, refreshSilent } = useDashboardData();
   const { user } = useAuth();
 
   const [query, setQuery] = useState("");
@@ -51,13 +51,12 @@ export default function Dashboard() {
   }, [computers, query, status, department, labName, sort]);
 
   const handleUpdateComputer = useCallback(
-    async (computerId, updates) => {
-      await updateComputer(computerId, updates);
-      await refresh();
-    },
-    [refresh]
-  );
-
+  async (computerId, updates) => {
+    await updateComputer(computerId, updates);
+    await refreshSilent();
+  },
+  [refreshSilent]
+);
   const alertsByComputer = useMemo(() => {
     const map = {};
     for (const alert of data?.recent_alerts ?? []) {
@@ -73,13 +72,13 @@ export default function Dashboard() {
     return map;
   }, [computers]);
 
-  const handleDismissAlert = useCallback(
-    async (alertId) => {
-      await acknowledgeAlert(alertId);
-      await refresh();
-    },
-    [refresh]
-  );
+const handleDismissAlert = useCallback(
+  async (alertId) => {
+    await acknowledgeAlert(alertId);
+    await refreshSilent();
+  },
+  [refreshSilent]
+);
 
   async function confirmLabShutdown() {
     if (!shutdownDialog) return;

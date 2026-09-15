@@ -50,6 +50,15 @@ export function fetchMaintenanceSummary(frequency, period, signal) {
 }
 
 /**
+ * GET /api/maintenance/retention-status
+ * Days left before the current half-year's maintenance data gets
+ * purged, plus how many rows are affected.
+ */
+export function fetchMaintenanceRetentionStatus(signal) {
+  return client.get("/api/maintenance/retention-status", { signal }).then((res) => res.data);
+}
+
+/**
  * POST /api/maintenance/log
  * Tick or untick one checklist item for one computer/period.
  */

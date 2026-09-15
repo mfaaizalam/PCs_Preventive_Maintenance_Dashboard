@@ -12,7 +12,7 @@ from app.schemas.maintenance_log import (
     MaintenanceLogResponse,
     MaintenanceLogToggle,
 )
-from app.services import export_service, maintenance_service
+from app.services import export_service, maintenance_service, retention_service
 
 router = APIRouter(prefix="/api/maintenance", tags=["maintenance"])
 
@@ -100,8 +100,10 @@ def export_checklist(
     computer_id: int | None = Query(
         None, description="Omit for the whole master list; set to export a single PC only"
     ),
+    
     db: Session = Depends(get_db),
 ):
+    
     if computer_id is not None:
         computer = db.query(Computer).filter(Computer.id == computer_id).first()
         if not computer:
@@ -117,3 +119,9 @@ def export_checklist(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+@router.get(
+    "/retention-status",
+    summary="Days left before the current half-year's maintenance data is purged",
+)
+def get_retention_status(db: Session = Depends(get_db)):
+    return retention_service.get_maintenance_retention_status(db)

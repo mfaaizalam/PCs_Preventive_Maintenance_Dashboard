@@ -14,7 +14,7 @@ AGENT_ID_DIR = os.environ.get("AGENT_ID_DIR", r"C:\ProgramData\LabAgent")
 AGENT_ID_FILE = os.path.join(AGENT_ID_DIR, "agent_id.txt")
 
 # ------------------------------------------------------------------
-# REMOTE SHUTDOWN
+# REMOTE SHUTDOWN 
 # ------------------------------------------------------------------
 AGENT_SHUTDOWN_ACK_URL_TEMPLATE = f"{API_BASE_URL}/api/agent/{{agent_id}}/shutdown-ack"
 SHUTDOWN_GRACE_SECONDS = 5
