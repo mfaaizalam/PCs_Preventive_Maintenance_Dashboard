@@ -132,7 +132,8 @@ def toggle_maintenance_log(
     for this computer, for this period.
 
     - Ticking sets completed=True and stamps completed_at/completed_by.
-    - Unticking sets completed=False and clears completed_at.
+    - Unticking sets completed=False but STILL stamps completed_at/
+      completed_by, so we know who un-ticked it and when.
     - The row is never deleted, so the "who last touched this" trail
       survives a box being unticked and re-ticked.
     """
@@ -164,7 +165,9 @@ def toggle_maintenance_log(
     log.completed_by = completed_by
     if notes is not None:
         log.notes = notes
-    log.completed_at = datetime.now(timezone.utc) if completed else None
+    # Har action (tick YA untick) pe stamp lagao - taake pata chale
+    # kisne aur kab last touch kiya, chahe box abhi checked ho ya nahi.
+    log.completed_at = datetime.now(timezone.utc)
 
     db.commit()
     db.refresh(log)

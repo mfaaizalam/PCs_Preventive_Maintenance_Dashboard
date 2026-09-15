@@ -77,8 +77,11 @@ export default function ChecklistTable({ checklist, frequency, period, savingTas
                   </span>
                 </td>
                 <td className="px-3 py-3 text-[12px] text-ink-400">
-                  {item.completed ? (
+                  {item.completed_at ? (
                     <>
+                      {!item.completed && (
+                        <span className="mr-1 font-medium text-signal-attention">Un-ticked ·</span>
+                      )}
                       {formatDateTime(item.completed_at)}
                       {item.completed_by && <span className="block">by {item.completed_by}</span>}
                     </>

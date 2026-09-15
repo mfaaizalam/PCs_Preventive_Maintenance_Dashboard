@@ -36,8 +36,10 @@ export default function MaintenanceDetail() {
   );
 
   function handleToggle(item) {
+    const normalize = (s) => s?.trim().toLowerCase().replace(/[-_]/g, " ").replace(/\s+/g, " ");
     const responsible = item.responsible_person?.trim();
-    const isMine = !responsible || responsible.toLowerCase() === user?.name?.toLowerCase();
+    const isManager = user?.name === "IT Manager";
+    const isMine = !responsible || normalize(responsible) === normalize(user?.name) || isManager;
 
     if (!isMine) {
       setDialog({
@@ -55,7 +57,7 @@ export default function MaintenanceDetail() {
         ? `This will un-tick "${item.task_name}" for this period.`
         : `This will tick "${item.task_name}" as completed by ${user?.name ?? "you"} for this period.`,
       confirmLabel: item.completed ? "Mark not done" : "Mark done",
-      onConfirm: () => toggleTask(item, item.completed ? null : user?.name ?? null),
+          onConfirm: () => toggleTask(item, user?.name ?? null),
     });
   }
 
