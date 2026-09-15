@@ -27,6 +27,7 @@ export default function Dashboard() {
 
   const [shutdownDialog, setShutdownDialog] = useState(null);
   const [shuttingDown, setShuttingDown] = useState(null);
+  const [hiddenAlertIds, setHiddenAlertIds] = useState(new Set());
 
   const computers = useMemo(() => data?.computers ?? [], [data]);
 
@@ -74,8 +75,13 @@ export default function Dashboard() {
 
 const handleDismissAlert = useCallback(
   async (alertId) => {
-    await acknowledgeAlert(alertId);
-    await refreshSilent();
+    
+    setHiddenAlertIds((prev) => new Set(prev).add(alertId));
+    try {
+      await acknowledgeAlert(alertId);
+    } finally {
+      refreshSilent();
+    }
   },
   [refreshSilent]
 );
@@ -218,7 +224,7 @@ const handleDismissAlert = useCallback(
         </div>
 
         <AlertsPanel
-          alerts={data?.recent_alerts ?? []}
+          alerts={(data?.recent_alerts ?? []).filter((a) => !hiddenAlertIds.has(a.id))}
           computersById={computersById}
           onDismiss={handleDismissAlert}
         />
