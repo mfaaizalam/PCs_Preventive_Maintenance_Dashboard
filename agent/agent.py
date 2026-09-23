@@ -1,3 +1,4 @@
+import json
 import logging
 import subprocess
 import sys
@@ -9,7 +10,7 @@ import config
 from collectors.hardware import get_hardware_info
 from collectors.licenses import get_license_info
 from collectors.peripherals import get_peripherals
-from collectors.software import get_software_inventory
+from collectors.software import get_software_inventory, get_tracked_software
 from collectors.system import get_system_info
 from services.api_client import send_report, send_shutdown_ack
 from collectors.hardware import get_system_uuid
@@ -84,6 +85,8 @@ def _map_peripheral_type(device_type: str | None) -> str:
         "physical_printer": "printer",
         "virtual_printer": "printer",
         "bluetooth_speaker": "headset",
+        "monitor": "monitor",
+        "projector": "projector",
         "external_ssd": "usb_storage",
         "external_storage": "usb_storage",
     }
@@ -188,7 +191,24 @@ def _build_peripherals(peripheral_list: list[dict]) -> list[dict]:
     return peripherals
 
 
-def _build_software_licenses(license_info: dict) -> list[dict]:
+def _build_software_licenses(
+    license_info: dict,
+    software_list: list[dict],
+) -> list[dict]:
+    """
+    Build license records for:
+      1. Windows
+      2. Microsoft Office
+      3. Every software item in the project's required baseline.
+
+    The project baseline is deliberately represented even when an application
+    is not installed. This lets the dashboard answer both:
+      - Is the required software installed?
+      - Does the system have a verified license status?
+
+    Detection alone never means "licensed".
+    """
+
     licenses = []
 
     windows = license_info.get("windows") or {}
@@ -197,9 +217,15 @@ def _build_software_licenses(license_info: dict) -> list[dict]:
             "product_name": windows.get("product") or "Windows",
             "vendor": "Microsoft",
             "license_type": "perpetual",
-            "status": _map_license_status(windows.get("license_status")),
-            "expiry_date": _parse_wmi_date(windows.get("expiration_date")),
-            "is_activated": windows.get("license_status") == "Licensed",
+            "status": _map_license_status(
+                windows.get("license_status")
+            ),
+            "expiry_date": _parse_wmi_date(
+                windows.get("expiration_date")
+            ),
+            "is_activated": (
+                windows.get("license_status") == "Licensed"
+            ),
             "detected_automatically": True,
             "notes": windows.get("error"),
         })
@@ -210,14 +236,187 @@ def _build_software_licenses(license_info: dict) -> list[dict]:
             "product_name": office.get("product") or "Microsoft Office",
             "vendor": "Microsoft",
             "license_type": "unknown",
-            "status": _map_license_status(office.get("license_status")),
+            "status": _map_license_status(
+                office.get("license_status")
+            ),
             "expiry_date": None,
-            "is_activated": office.get("license_status") == "Licensed",
+            "is_activated": (
+                office.get("license_status") == "Licensed"
+            ),
             "detected_automatically": True,
             "notes": office.get("error"),
         })
 
+    # ---------------------------------------------------------
+    # REQUIRED PROJECT SOFTWARE
+    # ---------------------------------------------------------
+    tracked = get_tracked_software(software_list)
+
+    for item in tracked:
+        required_name = item["required_name"]
+        installed = item.get("installed")
+
+        if installed:
+            installed_name = installed.get("name") or required_name
+            version = installed.get("version")
+            publisher = installed.get("publisher")
+
+            licenses.append({
+                "product_name": required_name,
+                "vendor": publisher,
+                "version": version,
+                "license_type": "unknown",
+                "status": "unknown",
+                "expiry_date": None,
+                "is_activated": False,
+                "detected_automatically": True,
+                "notes": (
+                    f"Required software detected as "
+                    f"'{installed_name}'. "
+                    "Installation detected; license activation "
+                    "was not independently verified by the agent."
+                ),
+            })
+        else:
+            licenses.append({
+                "product_name": required_name,
+                "vendor": None,
+                "version": None,
+                "license_type": "unknown",
+                "status": "not_activated",
+                "expiry_date": None,
+                "is_activated": False,
+                "detected_automatically": True,
+                "notes": (
+                    "Required by the project software baseline "
+                    "but not detected in the Windows installed-software "
+                    "registry."
+                ),
+            })
+
     return licenses
+
+def _peripheral_snapshot_file() -> str:
+    return os.path.join(
+        config.AGENT_ID_DIR,
+        "peripheral_snapshot.json",
+    )
+
+
+def _peripheral_identity(device: dict) -> str:
+    """
+    Build a stable identity for connect/disconnect tracking.
+    Prefer the Windows DeviceID. Fall back to name/type when needed.
+    """
+    device_key = (
+        device.get("device_id")
+        or device.get("name")
+        or "unknown"
+    )
+    device_type = device.get("device_type") or "other"
+
+    return f"{device_type}|{device_key}"
+
+
+def _load_peripheral_snapshot() -> dict:
+    path = _peripheral_snapshot_file()
+
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+
+        return data if isinstance(data, dict) else {}
+
+    except (FileNotFoundError, OSError, ValueError):
+        return {}
+
+
+def _save_peripheral_snapshot(peripherals: list[dict]) -> None:
+    os.makedirs(config.AGENT_ID_DIR, exist_ok=True)
+
+    snapshot = {}
+
+    for device in peripherals:
+        key = _peripheral_identity(device)
+
+        snapshot[key] = {
+            "device_type": device.get("device_type"),
+            "device_id": device.get("device_id"),
+            "name": device.get("name"),
+        }
+
+    path = _peripheral_snapshot_file()
+
+    temp_path = f"{path}.tmp"
+
+    try:
+        with open(
+            temp_path,
+            "w",
+            encoding="utf-8",
+        ) as handle:
+            json.dump(
+                snapshot,
+                handle,
+                indent=2,
+            )
+
+        os.replace(temp_path, path)
+
+    except OSError:
+        logger.exception(
+            "Could not save peripheral snapshot"
+        )
+
+
+def _build_peripheral_events(
+    peripherals: list[dict],
+) -> list[dict]:
+    """
+    Generate CONNECTED events for devices that appear for the first time
+    after the initial baseline.
+
+    DISCONNECTED events are intentionally left to the backend's existing
+    missing-device detection. This prevents duplicate disconnect records.
+    """
+
+    previous = _load_peripheral_snapshot()
+
+    current = {
+        _peripheral_identity(device): device
+        for device in peripherals
+    }
+
+    # First successful inventory creates a baseline only.
+    if not previous:
+        _save_peripheral_snapshot(peripherals)
+        return []
+
+    events = []
+
+    for key, device in current.items():
+        if key in previous:
+            continue
+
+        events.append({
+            "event_type": "connected",
+            "device_type": _map_peripheral_type(
+                device.get("device_type")
+            ),
+            "device_key": (
+                device.get("device_id")
+                or device.get("name")
+                or key
+            ),
+            "details": (
+                f"{device.get('name') or 'Device'} "
+                "was newly detected by the agent."
+            ),
+        })
+
+    _save_peripheral_snapshot(peripherals)
+
+    return events
 
 
 def _build_installed_software(software_list: list[dict]) -> list[dict]:
@@ -278,8 +477,13 @@ def build_report_payload(agent_id: str, raw: dict, hardware_uuid: str | None) ->
             hardware.get("storage_health", []),
         ),
         "peripherals": _build_peripherals(raw["peripherals"]),
-        "peripheral_events": [],
-        "software_licenses": _build_software_licenses(raw["licenses"]),
+        "peripheral_events": _build_peripheral_events(
+            raw["peripherals"]
+        ),
+        "software_licenses": _build_software_licenses(
+            raw["licenses"],
+            raw["software"],
+        ),
         "installed_software": _build_installed_software(raw["software"]),
         "metrics": {
             "cpu_usage_percent": system.get("cpu_usage"),

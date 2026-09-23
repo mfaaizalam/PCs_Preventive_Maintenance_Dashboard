@@ -27,6 +27,7 @@ class PeripheralType(str, enum.Enum):
     MOUSE = "mouse"
     KEYBOARD = "keyboard"
     MONITOR = "monitor"
+    PROJECTOR = "projector"
     PRINTER = "printer"
     USB_STORAGE = "usb_storage"
     WEBCAM = "webcam"
@@ -88,10 +89,12 @@ class MaintenanceFrequency(str, enum.Enum):
     QUARTERLY = "quarterly"
     CUSTOM = "custom"
 
+
 class UserRole(str, enum.Enum):
     IT_MANAGER = "it-manager"
     IT_SUPPORT = "it-support"
     LAB_STAFF = "lab-staff"
+
 
 class HardwareChangeType(str, enum.Enum):
     RAM = "ram"
