@@ -12,10 +12,11 @@ import config
 logger = logging.getLogger("agent.api_client")
 
 
-def send_report(payload: dict) -> dict | None:
+def send_report(payload: dict, max_retries: int | None = None) -> dict | None:
+    max_retries = max_retries or config.MAX_RETRIES
     last_error = None
 
-    for attempt in range(1, config.MAX_RETRIES + 1):
+    for attempt in range(1, max_retries + 1):
         try:
             response = requests.post(
                 config.AGENT_REPORT_URL,
@@ -35,7 +36,7 @@ def send_report(payload: dict) -> dict | None:
             logger.info(
                 "Report sent successfully (attempt %d/%d)",
                 attempt,
-                config.MAX_RETRIES,
+                max_retries,
             )
             return response.json()
 
@@ -45,7 +46,7 @@ def send_report(payload: dict) -> dict | None:
                 "Could not reach backend at %s (attempt %d/%d): %s",
                 config.AGENT_REPORT_URL,
                 attempt,
-                config.MAX_RETRIES,
+                max_retries,
                 exc,
             )
 
@@ -54,7 +55,7 @@ def send_report(payload: dict) -> dict | None:
             logger.warning(
                 "Backend request timed out (attempt %d/%d): %s",
                 attempt,
-                config.MAX_RETRIES,
+                max_retries,
                 exc,
             )
 
@@ -62,12 +63,12 @@ def send_report(payload: dict) -> dict | None:
             logger.error("Backend returned an error status: %s", exc)
             return None
 
-        if attempt < config.MAX_RETRIES:
+        if attempt < max_retries:
             time.sleep(config.RETRY_BACKOFF_SECONDS)
 
     logger.error(
         "Giving up on this report after %d attempts: %s",
-        config.MAX_RETRIES,
+        max_retries,
         last_error,
     )
     return None
