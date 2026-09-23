@@ -1,15 +1,91 @@
 import win32com.client
 
 
+# Keywords used only to classify a display as a projector.
+# Many projectors expose themselves to Windows as a normal PnP monitor,
+# so the exact model name is used when Windows provides it.
+PROJECTOR_KEYWORDS = (
+    "projector",
+    "projector display",
+    "beamer",
+    "epson",
+    "benq",
+    "viewsonic projector",
+    "nec projector",
+    "panasonic projector",
+    "optoma",
+    "hitachi projector",
+    "acer projector",
+    "sony projector",
+)
+
+
+def _safe(value):
+    return str(value).strip() if value is not None else None
+
+
+def _is_projector(name: str | None) -> bool:
+    value = (name or "").lower()
+    return any(keyword in value for keyword in PROJECTOR_KEYWORDS)
+
+
+def _append_display(peripherals, seen_keys, device, source="pnp"):
+    """
+    Add a physical display/projector only once.
+
+    Windows normally exposes a projector as a monitor/display. We keep the
+    original PnP device id as the stable device_key so disconnect/reconnect
+    can be tracked by the backend.
+    """
+    name = _safe(getattr(device, "Name", None))
+    device_id = _safe(getattr(device, "DeviceID", None))
+    pnp_class = _safe(getattr(device, "PNPClass", None))
+
+    if not device_id and not name:
+        return
+
+    device_id = device_id or name
+    key = device_id.upper()
+
+    if key in seen_keys:
+        return
+
+    seen_keys.add(key)
+
+    friendly_name = name or "Display"
+
+    peripherals.append({
+        "device_type": "projector" if _is_projector(friendly_name) else "monitor",
+        "name": friendly_name,
+        "device_id": device_id,
+        "status": _safe(getattr(device, "Status", None)) or "OK",
+        "is_virtual": False,
+        "model": friendly_name,
+        "descriptor": (
+            f"Windows PnP display ({pnp_class or source})"
+        ),
+    })
+
+
 def get_peripherals():
     """
-    Collect currently detected keyboards, pointing devices,
-    printers, projectors/displays, external/portable SSDs,
-    and Bluetooth speakers.
+    Collect currently detected physical peripherals.
+
+    Includes:
+      - keyboard
+      - mouse / touchpad
+      - monitor / projector
+      - printer
+      - USB storage / external SSD
+      - Bluetooth audio devices
+
+    The agent sends the current inventory every report. The agent also keeps
+    a local snapshot so it can report newly connected devices immediately.
+    The backend already converts previously-seen devices that disappear from
+    the next inventory into DISCONNECTED/MISSING events.
     """
 
     wmi = win32com.client.GetObject("winmgmts:")
-
     peripherals = []
 
     # =========================================================
@@ -17,12 +93,11 @@ def get_peripherals():
     # =========================================================
 
     for device in wmi.InstancesOf("Win32_Keyboard"):
-
         peripherals.append({
             "device_type": "keyboard",
-            "name": device.Name,
-            "device_id": device.DeviceID,
-            "status": device.Status,
+            "name": _safe(device.Name),
+            "device_id": _safe(device.DeviceID),
+            "status": _safe(device.Status) or "OK",
             "is_virtual": False,
         })
 
@@ -31,43 +106,84 @@ def get_peripherals():
     # =========================================================
 
     for device in wmi.InstancesOf("Win32_PointingDevice"):
+        name = (_safe(device.Name) or "").lower()
+        device_id = (_safe(device.DeviceID) or "").lower()
 
-        name = (device.Name or "").lower()
-        device_id = (device.DeviceID or "").lower()
-
-        touchpad_keywords = [
+        touchpad_keywords = (
             "touchpad",
             "clickpad",
             "trackpad",
             "elan",
             "synaptics",
             "precision touchpad",
-        ]
+        )
 
         is_touchpad = any(
             keyword in name or keyword in device_id
             for keyword in touchpad_keywords
         )
 
-        device_type = "touchpad" if is_touchpad else "mouse"
-
         peripherals.append({
-            "device_type": device_type,
-            "name": device.Name,
-            "device_id": device.DeviceID,
-            "status": device.Status,
+            "device_type": "touchpad" if is_touchpad else "mouse",
+            "name": _safe(device.Name),
+            "device_id": _safe(device.DeviceID),
+            "status": _safe(device.Status) or "OK",
             "is_virtual": False,
         })
+
+    # =========================================================
+    # MONITORS / PROJECTORS
+    # =========================================================
+    # Win32_PnPEntity is preferred because it gives a stable PnP DeviceID.
+    # A second Win32_DesktopMonitor pass catches older Windows systems where
+    # the monitor PnP class is not exposed cleanly.
+
+    display_keys = set()
+
+    try:
+        for device in wmi.InstancesOf("Win32_PnPEntity"):
+            pnp_class = (_safe(getattr(device, "PNPClass", None)) or "").lower()
+            name = _safe(getattr(device, "Name", None)) or ""
+
+            if pnp_class == "monitor":
+                _append_display(
+                    peripherals,
+                    display_keys,
+                    device,
+                    source="pnp",
+                )
+
+            # Some projectors/drivers do not report PNPClass=Monitor.
+            if _is_projector(name):
+                _append_display(
+                    peripherals,
+                    display_keys,
+                    device,
+                    source="projector-detection",
+                )
+    except Exception:
+        # Display collection should never stop the rest of the agent.
+        pass
+
+    try:
+        for device in wmi.InstancesOf("Win32_DesktopMonitor"):
+            _append_display(
+                peripherals,
+                display_keys,
+                device,
+                source="desktop-monitor",
+            )
+    except Exception:
+        pass
 
     # =========================================================
     # PRINTERS
     # =========================================================
 
     for device in wmi.InstancesOf("Win32_Printer"):
+        name = (_safe(device.Name) or "").lower()
 
-        name = (device.Name or "").lower()
-
-        virtual_printer_keywords = [
+        virtual_printer_keywords = (
             "microsoft print to pdf",
             "microsoft xps document writer",
             "onenote",
@@ -75,7 +191,7 @@ def get_peripherals():
             "dopdf",
             "pdf",
             "xps",
-        ]
+        )
 
         is_virtual = any(
             keyword in name
@@ -90,106 +206,133 @@ def get_peripherals():
 
         status = (
             "offline"
-            if device.WorkOffline
+            if bool(getattr(device, "WorkOffline", False))
             else "online"
         )
 
         peripherals.append({
             "device_type": printer_type,
-            "name": device.Name,
-            "device_id": device.DeviceID,
+            "name": _safe(device.Name),
+            "device_id": _safe(device.DeviceID),
             "status": status,
             "is_virtual": is_virtual,
         })
 
     # =========================================================
-    # EXTERNAL / PORTABLE SSDs
+    # EXTERNAL / PORTABLE STORAGE
     # =========================================================
-    # MSFT_PhysicalDisk (Storage namespace) reports a real
-    # MediaType (SSD vs HDD vs Unspecified) and BusType (USB vs
-    # SATA/NVMe internal), so it's used first - it's the only
-    # reliable way to tell "external" AND "SSD" apart, not just
-    # external. Falls back to Win32_DiskDrive (which only knows
-    # interface, not SSD vs HDD) if the Storage namespace isn't
-    # available (older Windows / stripped-down builds).
 
     try:
         storage_wmi = win32com.client.GetObject(
             r"winmgmts:\\.\root\Microsoft\Windows\Storage"
         )
 
-        # BusType: 7 = USB. MediaType: 4 = SSD.
+        # BusType 7 = USB, MediaType 4 = SSD.
         for disk in storage_wmi.InstancesOf("MSFT_PhysicalDisk"):
-
             is_usb = getattr(disk, "BusType", None) == 7
             is_ssd = getattr(disk, "MediaType", None) == 4
 
             if is_usb:
                 size_bytes = getattr(disk, "Size", None)
+
                 peripherals.append({
-                    "device_type": "external_ssd" if is_ssd else "external_storage",
-                    "name": disk.FriendlyName,
-                    "device_id": disk.DeviceId,
-                    "status": "ok" if getattr(disk, "HealthStatus", 0) == 0 else "degraded",
+                    "device_type": (
+                        "external_ssd"
+                        if is_ssd
+                        else "external_storage"
+                    ),
+                    "name": _safe(getattr(disk, "FriendlyName", None)),
+                    "device_id": _safe(getattr(disk, "DeviceId", None)),
+                    "status": (
+                        "ok"
+                        if getattr(disk, "HealthStatus", 0) == 0
+                        else "degraded"
+                    ),
                     "is_virtual": False,
-                    "size_gb": round(int(size_bytes) / (1024 ** 3), 1) if size_bytes else None,
+                    "size_gb": (
+                        round(int(size_bytes) / (1024 ** 3), 1)
+                        if size_bytes
+                        else None
+                    ),
                 })
 
     except Exception:
-        # Storage namespace unavailable - fall back to a
-        # USB-only check (no reliable SSD/HDD distinction here).
+        # Older Windows fallback.
         for disk in wmi.InstancesOf("Win32_DiskDrive"):
+            interface_type = (
+                _safe(getattr(disk, "InterfaceType", None)) or ""
+            ).upper()
+            caption = (
+                _safe(getattr(disk, "Caption", None)) or ""
+            ).lower()
 
-            interface_type = (disk.InterfaceType or "").upper()
-            caption = (disk.Caption or "").lower()
-
-            is_usb = interface_type == "USB" or "usb" in caption
-            is_ssd = "ssd" in caption or "solid state" in caption
+            is_usb = (
+                interface_type == "USB"
+                or "usb" in caption
+            )
+            is_ssd = (
+                "ssd" in caption
+                or "solid state" in caption
+            )
 
             if is_usb:
                 size = getattr(disk, "Size", None)
+
                 peripherals.append({
-                    "device_type": "external_ssd" if is_ssd else "external_storage",
-                    "name": disk.Caption,
-                    "device_id": disk.DeviceID,
-                    "status": "ok" if disk.Status == "OK" else disk.Status,
+                    "device_type": (
+                        "external_ssd"
+                        if is_ssd
+                        else "external_storage"
+                    ),
+                    "name": _safe(getattr(disk, "Caption", None)),
+                    "device_id": _safe(getattr(disk, "DeviceID", None)),
+                    "status": (
+                        "ok"
+                        if _safe(getattr(disk, "Status", None)) == "OK"
+                        else _safe(getattr(disk, "Status", None))
+                    ),
                     "is_virtual": False,
-                    "size_gb": round(int(size) / (1024 ** 3), 1) if size else None,
+                    "size_gb": (
+                        round(int(size) / (1024 ** 3), 1)
+                        if size
+                        else None
+                    ),
                 })
 
     # =========================================================
     # BLUETOOTH SPEAKERS / HEADSETS
     # =========================================================
-    # Filtered to Bluetooth audio-profile devices only (A2DP /
-    # Hands-Free), so paired BT mice/keyboards don't show up
-    # here - those are covered by POINTING DEVICES / KEYBOARDS
-    # above once Windows exposes them as HID devices.
 
     bt_audio_services = ("btha2dp", "bthhfenum", "bthenum")
-    audio_name_keywords = [
+    audio_name_keywords = (
         "speaker",
         "headphone",
         "headset",
         "earbuds",
         "soundbar",
         "audio",
-    ]
+    )
 
     for device in wmi.InstancesOf("Win32_PnPEntity"):
+        device_id = (_safe(device.DeviceID) or "").upper()
+        service = (_safe(device.Service) or "").lower()
+        name = (_safe(device.Name) or "").lower()
 
-        device_id = (device.DeviceID or "").upper()
-        service = (device.Service or "").lower()
-        name = (device.Name or "").lower()
-
-        is_bluetooth = "BTHENUM" in device_id or service in bt_audio_services
-        is_audio_like = any(keyword in name for keyword in audio_name_keywords)
+        is_bluetooth = (
+            "BTHENUM" in device_id
+            or service in bt_audio_services
+        )
+        is_audio_like = any(
+            keyword in name
+            for keyword in audio_name_keywords
+        )
 
         if is_bluetooth and is_audio_like:
             peripherals.append({
                 "device_type": "bluetooth_speaker",
-                "name": device.Name,
-                "device_id": device.DeviceID,
-                "status": device.Status,
+                "name": _safe(device.Name),
+                "device_id": _safe(device.DeviceID),
+                "status": _safe(device.Status) or "OK",
                 "is_virtual": False,
             })
 
@@ -197,7 +340,6 @@ def get_peripherals():
 
 
 if __name__ == "__main__":
-
     peripherals = get_peripherals()
 
     print("Detected Peripherals:\n")

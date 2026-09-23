@@ -72,10 +72,9 @@ export default function PCDetailHeader({ computer, onRefresh }) {
             )}
           </div>
           <p className="mt-1.5 text-sm text-ink-400">
-            Agent ID <span className="font-mono text-ink-500">{computer.agent_id}</span> ·{" "}
             {computer.is_online ? "Online" : "Offline"} · last check-in{" "}
             {formatDateTime(computer.last_seen)}
-            {computer.uptime_seconds != null && ` · up ${formatUptime(computer.uptime_seconds)}`}
+            {computer.uptime_seconds != null && `· up ${formatUptime(computer.uptime_seconds)}`}
           </p>
         </div>
 

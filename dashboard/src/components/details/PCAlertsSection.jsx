@@ -8,14 +8,7 @@ export default function PCAlertsSection({ alerts, limited }) {
     <div className="panel p-5 sm:p-6">
       <h2 className="font-display text-sm font-semibold text-ink-900">Alerts for this PC</h2>
 
-      {limited && (
-        <p className="mt-1.5 flex items-start gap-1.5 text-[12px] text-ink-400">
-          <Info className="mt-0.5 h-3 w-3 shrink-0" />
-          Pulled from the shared dashboard feed, which returns only the 10 most recent unresolved
-          alerts system-wide — older or resolved alerts for this PC won't appear here until a
-          per-PC alerts endpoint exists.
-        </p>
-      )}
+
 
       {alerts.length === 0 ? (
         <div className="mt-4">
