@@ -44,7 +44,8 @@ export default function useDashboardData(pollMs = 60000) {
       setError(null);
     } catch (err) {
       if (controller.signal.aborted) return;
-      setError(err);
+      // Cached snapshot exists -> keep showing it, don't replace the page with an error.
+      if (readCache() === null) setError(err);
     } finally {
       if (!isBackground && !controller.signal.aborted) setLoading(false);
     }

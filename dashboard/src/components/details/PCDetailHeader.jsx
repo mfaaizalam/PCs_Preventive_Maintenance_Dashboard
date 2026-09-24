@@ -61,9 +61,9 @@ export default function PCDetailHeader({ computer, onRefresh }) {
       </Link>
 
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="font-display text-2xl font-semibold text-ink-900">{computer.hostname}</h1>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <h1 className="break-words font-display text-2xl font-semibold text-ink-900">{computer.hostname}</h1>
             <StatusBadge status={status} />
             {computer.pending_shutdown && (
               <span className="inline-flex items-center gap-1 rounded-full bg-signal-criticalBg px-2 py-0.5 text-[11px] font-semibold text-signal-critical">

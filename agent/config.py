@@ -1,6 +1,6 @@
 import os
 
-API_BASE_URL = os.environ.get("AGENT_API_BASE_URL", "http://192.168.1.41:8000")
+API_BASE_URL = os.environ.get("AGENT_API_BASE_URL", "http://127.0.0.1:8000")
 AGENT_REPORT_URL = f"{API_BASE_URL}/api/agent/report"
 
 # Light report: CPU/RAM/disk usage + peripheral list/events (small payload).

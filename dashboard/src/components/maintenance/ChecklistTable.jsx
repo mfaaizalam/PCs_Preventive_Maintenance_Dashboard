@@ -16,8 +16,8 @@ const STATE_META = {
 
 export default function ChecklistTable({ checklist, frequency, period, savingTaskId, onToggle }) {
   return (
-    <div className="overflow-hidden rounded-xl2 border border-ink-100 bg-white">
-      <table className="w-full text-left text-sm">
+    <div className="overflow-x-auto rounded-xl2 border border-ink-100 bg-white">
+      <table className="w-full min-w-[640px] text-left text-sm">
         <thead className="bg-ink-50 text-[11px] uppercase tracking-wide text-ink-400">
           <tr>
             <th className="w-12 px-4 py-3"></th>

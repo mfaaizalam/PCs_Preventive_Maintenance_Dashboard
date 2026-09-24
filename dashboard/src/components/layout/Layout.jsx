@@ -12,7 +12,11 @@ export default function Layout() {
     <div className="flex min-h-screen bg-ink-50">
       <Sidebar open={menuOpen} onClose={() => setMenuOpen(false)} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar onMenuClick={() => setMenuOpen(true)} connectionOk={connectionOk} />
+        <Topbar
+          onMenuClick={() => setMenuOpen(true)}
+          connectionOk={connectionOk}
+          menuOpen={menuOpen}
+        />
         <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
           <Outlet />
         </main>

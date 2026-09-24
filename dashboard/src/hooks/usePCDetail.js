@@ -70,7 +70,8 @@ export default function usePCDetail(agentId) {
         alertsLimited: nextAlertsLimited,
       });
     } catch (err) {
-      setError(err);
+      // Cached snapshot exists -> keep showing it, don't replace the page with an error.
+      if (readCache(agentId) === null) setError(err);
     } finally {
       if (!isBackground) setLoading(false);
     }

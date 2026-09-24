@@ -32,8 +32,8 @@ export default function PCFilters({
   onSortChange,
 }) {
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-      <div className="relative min-w-[220px] flex-1 sm:max-w-xs">
+    <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
+      <div className="relative col-span-2 sm:col-span-1 sm:min-w-[220px] sm:max-w-xs sm:flex-1">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-300" />
         <input
           value={query}
@@ -46,7 +46,7 @@ export default function PCFilters({
       <select
         value={status}
         onChange={(e) => onStatusChange(e.target.value)}
-        className="rounded-lg border border-ink-200 bg-white px-3 py-2 text-sm text-ink-700 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
+        className="w-full min-w-0 rounded-lg border border-ink-200 bg-white px-3 py-2 text-sm text-ink-700 sm:w-auto focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
       >
         {STATUS_FILTERS.map((s) => (
           <option key={s.value} value={s.value}>
@@ -59,7 +59,7 @@ export default function PCFilters({
         <select
           value={department}
           onChange={(e) => onDepartmentChange(e.target.value)}
-          className="rounded-lg border border-ink-200 bg-white px-3 py-2 text-sm text-ink-700 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
+          className="w-full min-w-0 rounded-lg border border-ink-200 bg-white px-3 py-2 text-sm text-ink-700 sm:w-auto focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
         >
           <option value="all">All departments</option>
           {departmentOptions.map((d) => (
@@ -74,7 +74,7 @@ export default function PCFilters({
         <select
           value={labName}
           onChange={(e) => onLabNameChange(e.target.value)}
-          className="rounded-lg border border-ink-200 bg-white px-3 py-2 text-sm text-ink-700 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
+          className="w-full min-w-0 rounded-lg border border-ink-200 bg-white px-3 py-2 text-sm text-ink-700 sm:w-auto focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
         >
           <option value="all">All labs</option>
           {labNameOptions.map((l) => (
@@ -85,12 +85,12 @@ export default function PCFilters({
         </select>
       )}
 
-      <div className="relative sm:ml-auto">
+      <div className="relative min-w-0 sm:ml-auto">
         <ArrowUpDown className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-300" />
         <select
           value={sort}
           onChange={(e) => onSortChange(e.target.value)}
-          className="rounded-lg border border-ink-200 bg-white py-2 pl-8 pr-3 text-sm text-ink-700 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
+          className="w-full min-w-0 rounded-lg border border-ink-200 bg-white py-2 pl-8 pr-3 text-sm text-ink-700 sm:w-auto focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
         >
           {SORT_OPTIONS.map((s) => (
             <option key={s.value} value={s.value}>

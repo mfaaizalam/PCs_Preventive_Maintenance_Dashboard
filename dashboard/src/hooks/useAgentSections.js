@@ -84,7 +84,8 @@ export default function useAgentSections(agentId) {
       setSections(next);
       writeCache(agentId, next);
     } catch (err) {
-      setError(err);
+      // Cached snapshot exists -> keep showing it, don't replace the section with an error.
+      if (readCache(agentId) === null) setError(err);
     } finally {
       if (!isBackground) setLoading(false);
     }
