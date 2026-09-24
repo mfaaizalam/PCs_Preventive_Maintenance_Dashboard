@@ -155,6 +155,8 @@ export default function ChecklistOverview() {
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             <div className="panel p-5 lg:col-span-2">
               <p className="mb-3 text-sm font-semibold text-ink-800">Completion by task</p>
+              <div className="overflow-x-auto">
+              <div className="min-w-[480px]">
               <ResponsiveContainer width="100%" height={Math.max(summary.by_task.length * 42, 200)}>
                 <BarChart data={summary.by_task} layout="vertical" margin={{ left: 12, right: 24 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} />
@@ -179,6 +181,8 @@ export default function ChecklistOverview() {
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
+              </div>
+              </div>
             </div>
 
             <div className="panel p-5">
@@ -199,6 +203,8 @@ export default function ChecklistOverview() {
 
           <div className="panel p-5">
             <p className="mb-3 text-sm font-semibold text-ink-800">Completion by lab section</p>
+            <div className="overflow-x-auto">
+            <div className="min-w-[480px]">
             <ResponsiveContainer width="100%" height={Math.max(summary.by_lab_section.length * 42, 200)}>
               <BarChart data={summary.by_lab_section} layout="vertical" margin={{ left: 12, right: 24 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} />
@@ -219,6 +225,8 @@ export default function ChecklistOverview() {
                 <Bar dataKey="percent" radius={[0, 4, 4, 0]} fill="#2563eb" />
               </BarChart>
             </ResponsiveContainer>
+            </div>
+            </div>
           </div>
         </>
       )}

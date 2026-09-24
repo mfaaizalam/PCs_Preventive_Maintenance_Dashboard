@@ -52,7 +52,7 @@ export default function ChangePasswordModal({ open, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <div className="w-full max-w-sm rounded-xl2 bg-white p-6 shadow-cardHover">
+      <div className="max-h-[90dvh] w-full max-w-sm overflow-y-auto rounded-xl2 bg-white p-5 shadow-cardHover sm:p-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <KeyRound className="h-4 w-4 text-brand-700" />

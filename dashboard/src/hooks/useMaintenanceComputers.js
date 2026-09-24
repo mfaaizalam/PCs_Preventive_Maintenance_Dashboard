@@ -36,7 +36,8 @@ export default function useMaintenanceComputers() {
       setComputers(result);
       writeCache(result);
     } catch (err) {
-      setError(err);
+      // Cached snapshot exists -> keep showing it, don't replace the page with an error.
+      if (readCache() === null) setError(err);
     } finally {
       if (!isBackground) setLoading(false);
     }

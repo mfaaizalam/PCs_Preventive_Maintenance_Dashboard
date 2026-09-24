@@ -14,8 +14,6 @@ const LEGEND = [
   { key: "offline", label: "Offline", dot: "bg-signal-offline" },
 ];
 
-const SEATS_PER_ROW = 5;
-
 function groupBySection(computers) {
   const groups = new Map();
 
@@ -77,8 +75,8 @@ export default function Maintenance() {
         </Link>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="relative max-w-xs flex-1">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+        <div className="relative w-full sm:w-auto sm:max-w-xs sm:flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-300" />
 
           <input
@@ -89,7 +87,7 @@ export default function Maintenance() {
           />
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
           {LEGEND.map((item) => (
             <span
               key={item.key}
@@ -121,12 +119,7 @@ export default function Maintenance() {
                 </p>
               </div>
 
-              <div
-                className="grid gap-3"
-                style={{
-                  gridTemplateColumns: `repeat(${SEATS_PER_ROW}, minmax(0, 1fr))`,
-                }}
-              >
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
                 {sectionComputers.map((computer) => (
                   <ComputerSeat
                     key={computer.id}

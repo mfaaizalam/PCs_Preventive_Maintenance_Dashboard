@@ -85,7 +85,7 @@ export default function PrintExportButton({ frequency, period, computerId, hostn
       </button>
 
       {open && (
-        <div className="absolute right-0 top-[calc(100%+6px)] z-10 w-64 overflow-hidden rounded-xl2 border border-ink-100 bg-white shadow-cardHover">
+        <div className="absolute left-0 top-[calc(100%+6px)] z-10 w-64 max-w-[calc(100vw-2rem)] overflow-hidden sm:left-auto sm:right-0 rounded-xl2 border border-ink-100 bg-white shadow-cardHover">
           <button
             onClick={() => runExport("pc")}
             className="flex w-full items-start gap-2.5 px-4 py-3 text-left transition hover:bg-ink-50"
