@@ -1,15 +1,31 @@
 import axios from "axios";
 
-// By default this is "" (relative URLs like /api/agent/dashboard).
-// In dev, vite.config.js proxies those to VITE_API_BASE_URL so the
-// browser only ever talks to the Vite origin (the backend has no
-// CORSMiddleware, so calling it directly cross-origin would fail).
-// In production, serve this app behind the same reverse proxy that
-// routes /api and /health to the backend. If you deploy the frontend
-// on a different origin with no proxy in front, set VITE_API_BASE_URL
-// to the backend's full URL AND enable CORSMiddleware on the backend
-// — that combination is the only way a browser will allow it.
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL_DIRECT || "";
+// ------------------------------------------------------------------
+// ADDED: RUNTIME-CONFIGURABLE SERVER ADDRESS
+// ------------------------------------------------------------------
+// Before this change, the backend's address was either "" (relative
+// URLs, only works if frontend + backend are same-origin behind a
+// reverse proxy) or a Vite build-time env var - meaning changing the
+// server's IP meant editing .env and running `npm run build` again.
+//
+// Now the app reads /server-config.json at startup - a plain JSON
+// file that sits next to index.html in the deployed `dist` folder
+// (see dashboard/public/server-config.json, which Vite copies as-is
+// into dist/ on build). To point this dashboard at a new server IP,
+// just edit that ONE file on the server PC and refresh the browser -
+// no rebuild, no redeploy, no touching any .js file.
+//
+//   { "apiBaseUrl": "" }
+//     -> same-origin / relative URLs (default - unchanged behaviour,
+//        use this if you put a reverse proxy in front of both apps)
+//
+//   { "apiBaseUrl": "http://192.168.1.50:8000" }
+//     -> talk to the backend directly at that address. Requires
+//        ALLOWED_ORIGINS to be set on the backend (see backend/.env
+//        and backend/app/main.py) so the browser's CORS check passes.
+export let API_BASE_URL = "";
+
+let configLoadPromise = null;
 
 const client = axios.create({
   baseURL: API_BASE_URL,
@@ -18,6 +34,37 @@ const client = axios.create({
     "Content-Type": "application/json",
   },
 });
+
+// Call this once, before the app renders (see src/main.jsx). Safe to
+// call more than once - later calls just reuse the first result.
+export function loadRuntimeConfig() {
+  if (configLoadPromise) return configLoadPromise;
+
+  configLoadPromise = fetch("/server-config.json", { cache: "no-store" })
+    .then((res) => (res.ok ? res.json() : {}))
+    .catch(() => ({}))
+    .then((data) => {
+      if (data && typeof data.apiBaseUrl === "string" && data.apiBaseUrl.trim()) {
+        API_BASE_URL = data.apiBaseUrl.trim().replace(/\/+$/, "");
+      }
+      client.defaults.baseURL = API_BASE_URL;
+      return API_BASE_URL;
+    });
+
+  return configLoadPromise;
+}
+
+// Derives the WebSocket origin from API_BASE_URL so useWebSocket.js
+// talks to the same host the REST calls go to, instead of always
+// assuming the API lives on the page's own origin (which breaks once
+// apiBaseUrl points somewhere else).
+export function getWsOrigin() {
+  if (!API_BASE_URL) {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return `${protocol}//${window.location.host}`;
+  }
+  return API_BASE_URL.replace(/^http/, "ws");
+}
 
 // Key used to persist the auth JWT in localStorage. Exported so
 // AuthContext can read/write it without duplicating the string.

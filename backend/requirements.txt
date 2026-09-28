@@ -8,3 +8,11 @@ python-dotenv==1.2.2
 SQLAlchemy==2.0.51
 uvicorn==0.52.1
 openpyxl
+
+# --- ADDED: these were imported by app/core/security.py and
+# app/api/auth.py but were missing from this file, so a fresh
+# `pip install -r requirements.txt` (exactly what README.md tells you
+# to run) left the login/JWT code with nothing to import. That is why
+# `uvicorn app.main:app --reload` was failing to start. ---
+python-jose[cryptography]==3.3.0
+pwdlib[argon2]==0.3.1

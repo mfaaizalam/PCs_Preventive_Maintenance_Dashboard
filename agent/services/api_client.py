@@ -80,3 +80,39 @@ def send_shutdown_ack(agent_id: str) -> None:
         requests.post(url, timeout=5)
     except requests.exceptions.RequestException as exc:
         logger.warning("Could not send shutdown ack (shutting down anyway): %s", exc)
+
+
+def get_pause_status(agent_id: str) -> dict:
+    """
+    Checked once at startup, before any collection happens. Network issues
+    or an unknown agent_id are treated as "not paused" so a brand-new PC
+    still enrolls normally; this only ever short-circuits a run when the
+    server explicitly confirms a pause/resume flag.
+    """
+    default = {"pending_pause": False, "pending_resume": False, "monitoring_paused": False}
+    try:
+        url = config.AGENT_PAUSE_STATUS_URL_TEMPLATE.format(agent_id=agent_id)
+        response = requests.get(url, timeout=config.REQUEST_TIMEOUT_SECONDS)
+        if response.status_code == 404:
+            return default
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as exc:
+        logger.warning("Could not check pause status (assuming not paused): %s", exc)
+        return default
+
+
+def send_pause_ack(agent_id: str) -> None:
+    try:
+        url = config.AGENT_PAUSE_ACK_URL_TEMPLATE.format(agent_id=agent_id)
+        requests.post(url, timeout=5)
+    except requests.exceptions.RequestException as exc:
+        logger.warning("Could not send pause ack (stopping anyway): %s", exc)
+
+
+def send_resume_ack(agent_id: str) -> None:
+    try:
+        url = config.AGENT_RESUME_ACK_URL_TEMPLATE.format(agent_id=agent_id)
+        requests.post(url, timeout=5)
+    except requests.exceptions.RequestException as exc:
+        logger.warning("Could not send resume ack (continuing anyway): %s", exc)

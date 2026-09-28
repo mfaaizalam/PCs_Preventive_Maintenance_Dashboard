@@ -119,6 +119,24 @@ class Computer(Base, TimestampMixin):
         nullable=True,
     )
 
+    # ------------------------------------------------------------------
+    # AGENT MONITORING PAUSE (e.g. for "no extra software running" audits)
+    # The agent process actually exits while paused - this is not a
+    # hide/stealth switch, it is a real stop/start control.
+    # ------------------------------------------------------------------
+    monitoring_paused: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    pending_pause: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    pending_resume: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    agent_action_requested_by: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+    agent_action_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
     ram_slots: Mapped[list["RamSlot"]] = relationship(
         back_populates="computer",
         cascade="all, delete-orphan",

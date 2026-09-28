@@ -605,12 +605,16 @@ def _upsert_ram_slots(
                     value,
                 )
         else:
-            db.add(
-                RamSlot(
-                    computer_id=computer.id,
-                    **data,
-                )
+            row = RamSlot(
+                computer_id=computer.id,
+                **data,
             )
+            db.add(row)
+            # FIX: remember this new row so that if the same
+            # slot_number appears again later in this same payload,
+            # it updates this row instead of trying to INSERT a
+            # second one and hitting the UNIQUE constraint.
+            existing[item.slot_number] = row
 
     if items:
         for slot_number, row in existing.items():
@@ -650,12 +654,15 @@ def _upsert_storage_devices(
                     value,
                 )
         else:
-            db.add(
-                StorageDevice(
-                    computer_id=computer.id,
-                    **data,
-                )
+            row = StorageDevice(
+                computer_id=computer.id,
+                **data,
             )
+            db.add(row)
+            # FIX: same reasoning as _upsert_ram_slots - avoid a
+            # second INSERT for a duplicate device_identifier that
+            # shows up twice in the same payload.
+            existing[item.device_identifier] = row
 
     if items:
         for device_id, row in existing.items():
@@ -712,12 +719,14 @@ def _upsert_peripherals(
                     row.status,
                 )
         else:
-            db.add(
-                Peripheral(
-                    computer_id=computer.id,
-                    **data,
-                )
+            row = Peripheral(
+                computer_id=computer.id,
+                **data,
             )
+            db.add(row)
+            # FIX: same reasoning as _upsert_ram_slots - avoid a
+            # second INSERT for a duplicate device_key in one payload.
+            existing[item.device_key] = row
 
     # Previously seen but not reported -> missing.
     if items:
@@ -845,12 +854,14 @@ def _upsert_software_licenses(
                     value,
                 )
         else:
-            db.add(
-                SoftwareLicense(
-                    computer_id=computer.id,
-                    **data,
-                )
+            row = SoftwareLicense(
+                computer_id=computer.id,
+                **data,
             )
+            db.add(row)
+            # FIX: same reasoning as _upsert_ram_slots - avoid a
+            # second INSERT for a duplicate product_name in one payload.
+            existing[item.product_name] = row
 
 
 def _upsert_installed_software(
@@ -867,27 +878,41 @@ def _upsert_installed_software(
     for item in items:
         data = item.model_dump()
 
-        row = existing.get(
-            (
-                item.name,
-                item.publisher,
-            )
+        key = (
+            item.name,
+            item.publisher,
         )
 
+        row = existing.get(key)
+
         if row:
-            for key, value in data.items():
+            for k, value in data.items():
                 setattr(
                     row,
-                    key,
+                    k,
                     value,
                 )
         else:
-            db.add(
-                InstalledSoftware(
-                    computer_id=computer.id,
-                    **data,
-                )
+            row = InstalledSoftware(
+                computer_id=computer.id,
+                **data,
             )
+            db.add(row)
+            # FIX (the actual crash you hit): Windows often lists the
+            # same program under both the 32-bit and 64-bit uninstall
+            # registry keys, so the agent's payload can legitimately
+            # contain the same (name, publisher) pair twice in one
+            # report. `existing` was only built once from what's
+            # already in the DB, so on the SECOND occurrence in this
+            # same payload it wasn't found there either, and both got
+            # `db.add()`'d - two INSERTs for the same
+            # (computer_id, name, publisher) -> UNIQUE constraint
+            # violation on commit ("UNIQUE constraint failed:
+            # installed_software.computer_id, ...name, ...publisher").
+            # Recording the newly-added row here means the second
+            # occurrence in the same payload now finds it above and
+            # updates it instead of inserting a duplicate.
+            existing[key] = row
 
 
 def _generate_threshold_alert(
@@ -1567,5 +1592,129 @@ def ack_shutdown(
     computer.pending_shutdown = False
     computer.shutdown_requested_by = None
     computer.shutdown_requested_at = None
+
+    db.commit()
+
+
+# ----------------------------------------------------------------------
+# AGENT MONITORING PAUSE / RESUME (audit mode)
+# ----------------------------------------------------------------------
+
+def request_pause_agent(
+    db: Session,
+    computer_id: int,
+    requested_by: str,
+) -> Computer:
+    computer = db.query(Computer).filter(Computer.id == computer_id).first()
+    if not computer:
+        raise ValueError(f"Computer {computer_id} not found")
+
+    computer.pending_pause = True
+    computer.pending_resume = False
+    computer.agent_action_requested_by = requested_by
+    computer.agent_action_requested_at = datetime.now(timezone.utc)
+
+    db.commit()
+    db.refresh(computer)
+    return computer
+
+
+def request_resume_agent(
+    db: Session,
+    computer_id: int,
+    requested_by: str,
+) -> Computer:
+    computer = db.query(Computer).filter(Computer.id == computer_id).first()
+    if not computer:
+        raise ValueError(f"Computer {computer_id} not found")
+
+    computer.pending_resume = True
+    computer.pending_pause = False
+    computer.agent_action_requested_by = requested_by
+    computer.agent_action_requested_at = datetime.now(timezone.utc)
+
+    db.commit()
+    db.refresh(computer)
+    return computer
+
+
+def request_pause_all(
+    db: Session,
+    requested_by: str,
+    lab_section: str | None = None,
+) -> list[Computer]:
+    query = db.query(Computer).filter(
+        Computer.is_retired.is_(False),
+        Computer.is_online.is_(True),
+        Computer.monitoring_paused.is_(False),
+    )
+    if lab_section:
+        query = query.filter(Computer.lab_section == lab_section)
+    computers = query.all()
+
+    now = datetime.now(timezone.utc)
+    for computer in computers:
+        computer.pending_pause = True
+        computer.pending_resume = False
+        computer.agent_action_requested_by = requested_by
+        computer.agent_action_requested_at = now
+
+    db.commit()
+    for computer in computers:
+        db.refresh(computer)
+    return computers
+
+
+def request_resume_all(
+    db: Session,
+    requested_by: str,
+    lab_section: str | None = None,
+) -> list[Computer]:
+    query = db.query(Computer).filter(
+        Computer.is_retired.is_(False),
+        Computer.monitoring_paused.is_(True),
+    )
+    if lab_section:
+        query = query.filter(Computer.lab_section == lab_section)
+    computers = query.all()
+
+    now = datetime.now(timezone.utc)
+    for computer in computers:
+        computer.pending_resume = True
+        computer.pending_pause = False
+        computer.agent_action_requested_by = requested_by
+        computer.agent_action_requested_at = now
+
+    db.commit()
+    for computer in computers:
+        db.refresh(computer)
+    return computers
+
+
+def get_pause_status(db: Session, agent_id: str) -> Computer | None:
+    return get_computer_by_agent_id(db, agent_id)
+
+
+def ack_pause(db: Session, agent_id: str) -> None:
+    """Agent calls this right before it exits, confirming it actually stopped."""
+    computer = get_computer_by_agent_id(db, agent_id)
+    if not computer:
+        return
+
+    computer.monitoring_paused = True
+    computer.pending_pause = False
+    computer.is_online = False
+
+    db.commit()
+
+
+def ack_resume(db: Session, agent_id: str) -> None:
+    """Agent calls this when it wakes up and resumes normal reporting."""
+    computer = get_computer_by_agent_id(db, agent_id)
+    if not computer:
+        return
+
+    computer.monitoring_paused = False
+    computer.pending_resume = False
 
     db.commit()

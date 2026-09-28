@@ -12,7 +12,13 @@ from collectors.licenses import get_license_info
 from collectors.peripherals import get_peripherals
 from collectors.software import get_software_inventory, get_tracked_software
 from collectors.system import get_system_info
-from services.api_client import send_report, send_shutdown_ack
+from services.api_client import (
+    get_pause_status,
+    send_pause_ack,
+    send_report,
+    send_resume_ack,
+    send_shutdown_ack,
+)
 from collectors.hardware import get_system_uuid
 import psutil 
 logging.basicConfig(
@@ -507,6 +513,35 @@ def trigger_shutdown(agent_id: str) -> None:
     sys.exit(0)
 
 
+def check_pause_state_or_exit(agent_id: str) -> None:
+    """
+    Runs once at process startup, before any collector runs, so a paused
+    PC never even touches the registry/WMI while an audit is in progress.
+
+    This is a real stop, not a hide: on pause the process calls sys.exit
+    and is genuinely gone from Task Manager - it stays off until someone
+    starts agent.exe again (however that is normally done on that PC).
+    There is no background watchdog and nothing keeps running in the
+    meantime; "Resume" on the dashboard only clears the flag, so the very
+    next time the agent is started it picks monitoring back up instead of
+    exiting again.
+    """
+    status = get_pause_status(agent_id)
+
+    if status.get("pending_pause"):
+        logger.warning("Pause requested by dashboard - stopping monitoring now.")
+        send_pause_ack(agent_id)
+        sys.exit(0)
+
+    if status.get("monitoring_paused") and not status.get("pending_resume"):
+        logger.info("Still marked paused and no resume requested - exiting without collecting anything.")
+        sys.exit(0)
+
+    if status.get("pending_resume"):
+        logger.info("Resume requested by dashboard - starting monitoring again.")
+        send_resume_ack(agent_id)
+
+
 def collect_slow() -> dict:
     """Heavy collectors (registry scan, WMI, PowerShell, OSPP licence check)."""
     return {
@@ -518,6 +553,7 @@ def collect_slow() -> dict:
 
 def run_forever():
     agent_id = get_or_create_agent_id()
+    check_pause_state_or_exit(agent_id)
     psutil.cpu_percent(interval=None)
 
     hardware_uuid = get_system_uuid()
@@ -585,6 +621,11 @@ def run_forever():
                 )
                 if result.get("pending_shutdown"):
                     trigger_shutdown(agent_id)
+
+                if result.get("pending_pause"):
+                    logger.warning("Pause requested by dashboard - stopping monitoring now.")
+                    send_pause_ack(agent_id)
+                    sys.exit(0)
 
         except Exception:
             logger.exception("Unexpected error during collection/report cycle")

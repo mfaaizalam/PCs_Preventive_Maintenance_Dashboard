@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.database import get_db
+from app.models.enums import UserRole
 from app.models.user import User
 from app.schemas.user import ChangePasswordRequest, TokenResponse, UserLogin, UserResponse
 from app.services.auth_service import change_password, get_user_from_token, login_user
@@ -39,6 +40,19 @@ def get_current_user(
         raise credentials_exception
 
     return get_user_from_token(db=db, user_id=user_id)
+
+
+def require_it_manager(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    """Gate for actions only an IT Manager should be able to trigger
+    (e.g. pausing/resuming monitoring agents fleet-wide for an audit)."""
+    if current_user.role != UserRole.IT_MANAGER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only an IT Manager can perform this action",
+        )
+    return current_user
 
 
 @router.get("/me", response_model=UserResponse)

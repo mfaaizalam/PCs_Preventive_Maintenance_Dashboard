@@ -27,3 +27,31 @@ export function shutdownLabSection(labSection, requestedBy) {
     )
     .then((res) => res.data);
 }
+
+// ------------------------------------------------------------------
+// AGENT MONITORING PAUSE / RESUME (audit mode) - IT Manager only.
+// ------------------------------------------------------------------
+
+export function pauseAgent(computerId, requestedBy) {
+  return client
+    .post(`/api/computers/${computerId}/pause-agent`, { requested_by: requestedBy })
+    .then((res) => res.data);
+}
+
+export function resumeAgent(computerId, requestedBy) {
+  return client
+    .post(`/api/computers/${computerId}/resume-agent`, { requested_by: requestedBy })
+    .then((res) => res.data);
+}
+
+export function pauseAllAgents(requestedBy, labSection) {
+  return client
+    .post(`/api/computers/pause-all`, { requested_by: requestedBy, lab_section: labSection || null })
+    .then((res) => res.data);
+}
+
+export function resumeAllAgents(requestedBy, labSection) {
+  return client
+    .post(`/api/computers/resume-all`, { requested_by: requestedBy, lab_section: labSection || null })
+    .then((res) => res.data);
+}

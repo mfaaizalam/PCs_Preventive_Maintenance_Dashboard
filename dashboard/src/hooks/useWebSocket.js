@@ -1,11 +1,18 @@
 import { useEffect, useRef, useCallback } from "react";
+import { getWsOrigin } from "../api/client";
 
 /**
- * Opens a WebSocket to `path` (relative, so it goes through the same
- * Vite proxy / reverse proxy as the REST API) and calls `onMessage`
- * for every JSON message received. Reconnects automatically with
- * capped exponential backoff - server reboots, wifi hiccups, etc.
- * shouldn't require reloading the dashboard tab.
+ * Opens a WebSocket to `path` and calls `onMessage` for every JSON
+ * message received. Reconnects automatically with capped exponential
+ * backoff - server reboots, wifi hiccups, etc. shouldn't require
+ * reloading the dashboard tab.
+ *
+ * CHANGED: the host used to always be `window.location.host` (i.e.
+ * "wherever this page was loaded from"), which only works when the
+ * frontend and backend are the same origin. It now comes from
+ * getWsOrigin() (src/api/client.js), which is driven by the same
+ * /server-config.json the REST client uses - so if apiBaseUrl there
+ * points at the backend directly, the WebSocket follows it there too.
  */
 export default function useWebSocket(path, onMessage) {
   const onMessageRef = useRef(onMessage);
@@ -16,8 +23,7 @@ export default function useWebSocket(path, onMessage) {
   const closedByUsRef = useRef(false);
 
   const connect = useCallback(() => {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const url = `${protocol}//${window.location.host}${path}`;
+    const url = `${getWsOrigin()}${path}`;
 
     const ws = new WebSocket(url);
     wsRef.current = ws;

@@ -74,6 +74,11 @@ class ComputerResponse(ComputerBase, TimestampSchema, ORMModel):
     pending_shutdown: bool = False
     shutdown_requested_by: str | None = None
     shutdown_requested_at: datetime | None = None
+    monitoring_paused: bool = False
+    pending_pause: bool = False
+    pending_resume: bool = False
+    agent_action_requested_by: str | None = None
+    agent_action_requested_at: datetime | None = None
 
 
 class ComputerSummaryResponse(ORMModel):
@@ -96,6 +101,9 @@ class ComputerSummaryResponse(ORMModel):
     pending_shutdown: bool = False
     shutdown_requested_by: str | None = None
     shutdown_requested_at: datetime | None = None
+    monitoring_paused: bool = False
+    pending_pause: bool = False
+    pending_resume: bool = False
     recent_hardware_events: list[HardwareEventBrief] = Field(default_factory=list)
 
 
@@ -115,3 +123,35 @@ class LabShutdownResponse(BaseModel):
     lab_section: str
     requested_count: int
     computers: list[ShutdownResponse]
+
+
+class AgentPauseRequest(BaseModel):
+    requested_by: str = Field(..., max_length=200, description="Name of the IT Manager triggering this")
+    lab_section: str | None = Field(
+        default=None,
+        max_length=100,
+        description="Limit to one lab section; omit to target every online, non-retired PC",
+    )
+
+
+class AgentPauseResponse(ORMModel):
+    id: int
+    hostname: str
+    monitoring_paused: bool
+    pending_pause: bool
+    pending_resume: bool
+    agent_action_requested_by: str | None = None
+    agent_action_requested_at: datetime | None = None
+
+
+class AgentPauseBulkResponse(BaseModel):
+    lab_section: str | None
+    affected_count: int
+    computers: list[AgentPauseResponse]
+
+
+class AgentPauseStatus(BaseModel):
+    """Tiny status the agent polls on startup, before doing any collection."""
+    pending_pause: bool = False
+    pending_resume: bool = False
+    monitoring_paused: bool = False

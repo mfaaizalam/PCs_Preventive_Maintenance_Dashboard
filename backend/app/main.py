@@ -3,6 +3,7 @@ import logging
 
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.core.config import settings
@@ -104,6 +105,24 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+# ------------------------------------------------------------------
+# ADDED: CORS - only turns on if ALLOWED_ORIGINS is set in backend/.env.
+# Needed when the dashboard is served from a different origin than this
+# API (e.g. frontend on :4173, backend on :8000, both reached by IP).
+# If you're using a same-origin reverse proxy instead, leave
+# ALLOWED_ORIGINS empty and this block does nothing - same behaviour
+# as before this change.
+# ------------------------------------------------------------------
+if settings.ALLOWED_ORIGINS:
+    wildcard = settings.ALLOWED_ORIGINS == ["*"]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.ALLOWED_ORIGINS,
+        allow_credentials=not wildcard,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 app.include_router(auth_router)
 app.include_router(agent_router)

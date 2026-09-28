@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.schemas.agent import AgentReportPayload, DashboardOverviewResponse
-from app.schemas.computer import ComputerResponse
+from app.schemas.computer import AgentPauseStatus, ComputerResponse
 from app.schemas.ram_slot import RamSlotResponse
 from app.schemas.storage_device import StorageDeviceResponse
 from app.schemas.installed_software import InstalledSoftwareResponse
@@ -47,6 +47,41 @@ async def report(payload: AgentReportPayload, db: Session = Depends(get_db)):
 )
 async def acknowledge_shutdown(agent_id: str, db: Session = Depends(get_db)):
     await asyncio.to_thread(computer_service.ack_shutdown, db, agent_id)
+
+
+@router.get(
+    "/{agent_id}/pause-status",
+    response_model=AgentPauseStatus,
+    summary="Agent calls this on startup, before collecting anything, to check for a pending pause/resume",
+)
+async def get_pause_status(agent_id: str, db: Session = Depends(get_db)):
+    computer = await asyncio.to_thread(computer_service.get_pause_status, db, agent_id)
+    if not computer:
+        # Unknown agent (first-ever run): nothing to pause, proceed normally.
+        return AgentPauseStatus()
+    return AgentPauseStatus(
+        pending_pause=computer.pending_pause,
+        pending_resume=computer.pending_resume,
+        monitoring_paused=computer.monitoring_paused,
+    )
+
+
+@router.post(
+    "/{agent_id}/pause-ack",
+    status_code=204,
+    summary="Agent calls this right before it exits for a pause, confirming it actually stopped",
+)
+async def acknowledge_pause(agent_id: str, db: Session = Depends(get_db)):
+    await asyncio.to_thread(computer_service.ack_pause, db, agent_id)
+
+
+@router.post(
+    "/{agent_id}/resume-ack",
+    status_code=204,
+    summary="Agent calls this when it wakes up and resumes normal reporting",
+)
+async def acknowledge_resume(agent_id: str, db: Session = Depends(get_db)):
+    await asyncio.to_thread(computer_service.ack_resume, db, agent_id)
 
 
 @router.get(

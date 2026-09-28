@@ -1,8 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.api.auth import require_it_manager
 from app.db.database import get_db
+from app.models.user import User
 from app.schemas.computer import (
+    AgentPauseBulkResponse,
+    AgentPauseRequest,
+    AgentPauseResponse,
     ComputerMetadataUpdate,
     ComputerSummaryResponse,
     LabShutdownResponse,
@@ -118,5 +123,104 @@ def shutdown_lab_section(
     return {
         "lab_section": lab_section,
         "requested_count": len(computers),
+        "computers": computers,
+    }
+
+
+# ----------------------------------------------------------------------
+# AGENT MONITORING PAUSE / RESUME (audit mode) - IT Manager only.
+# The agent actually stops reporting while paused; this is a real
+# stop/start control, not a way to hide the agent from the OS.
+# ----------------------------------------------------------------------
+
+def _broadcast_pause_state(computer) -> None:
+    asyncio.create_task(manager.broadcast({
+        "type": "computer_updated",
+        "agent_id": computer.agent_id,
+        "hostname": computer.hostname,
+        "monitoring_paused": computer.monitoring_paused,
+        "pending_pause": computer.pending_pause,
+        "pending_resume": computer.pending_resume,
+    }))
+
+
+@router.post(
+    "/{computer_id}/pause-agent",
+    response_model=AgentPauseResponse,
+    summary="[IT Manager only] Flag one PC's agent to stop on its next check-in",
+)
+def pause_agent(
+    computer_id: int,
+    payload: AgentPauseRequest,
+    db: Session = Depends(get_db),
+    _manager: User = Depends(require_it_manager),
+):
+    try:
+        computer = computer_service.request_pause_agent(db, computer_id, payload.requested_by)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+    _broadcast_pause_state(computer)
+    return computer
+
+
+@router.post(
+    "/{computer_id}/resume-agent",
+    response_model=AgentPauseResponse,
+    summary="[IT Manager only] Flag one PC's agent to resume on its next check-in",
+)
+def resume_agent(
+    computer_id: int,
+    payload: AgentPauseRequest,
+    db: Session = Depends(get_db),
+    _manager: User = Depends(require_it_manager),
+):
+    try:
+        computer = computer_service.request_resume_agent(db, computer_id, payload.requested_by)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+    _broadcast_pause_state(computer)
+    return computer
+
+
+@router.post(
+    "/pause-all",
+    response_model=AgentPauseBulkResponse,
+    summary="[IT Manager only] Flag every online PC's agent to stop (optionally scoped to one lab)",
+)
+def pause_all_agents(
+    payload: AgentPauseRequest,
+    db: Session = Depends(get_db),
+    _manager: User = Depends(require_it_manager),
+):
+    computers = computer_service.request_pause_all(db, payload.requested_by, payload.lab_section)
+    for computer in computers:
+        _broadcast_pause_state(computer)
+
+    return {
+        "lab_section": payload.lab_section,
+        "affected_count": len(computers),
+        "computers": computers,
+    }
+
+
+@router.post(
+    "/resume-all",
+    response_model=AgentPauseBulkResponse,
+    summary="[IT Manager only] Flag every paused PC's agent to resume (optionally scoped to one lab)",
+)
+def resume_all_agents(
+    payload: AgentPauseRequest,
+    db: Session = Depends(get_db),
+    _manager: User = Depends(require_it_manager),
+):
+    computers = computer_service.request_resume_all(db, payload.requested_by, payload.lab_section)
+    for computer in computers:
+        _broadcast_pause_state(computer)
+
+    return {
+        "lab_section": payload.lab_section,
+        "affected_count": len(computers),
         "computers": computers,
     }

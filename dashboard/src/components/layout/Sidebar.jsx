@@ -1,16 +1,25 @@
 import { useEffect } from "react";
 import { NavLink } from "react-router-dom";
-import { LayoutGrid, FolderKanban, ClipboardCheck, BarChart3, MonitorCog, UserCircle2 } from "lucide-react";
+import { LayoutGrid, FolderKanban, ClipboardCheck, BarChart3, MonitorCog, UserCircle2, ShieldCheck } from "lucide-react";
 import { useAuth } from "../../auth/AuthContext";
 
-const NAV_ITEMS = [
+const BASE_NAV_ITEMS = [
   { to: "/", label: "Dashboard", icon: LayoutGrid, end: true },
   { to: "/maintenance", label: "Maintenance", icon: ClipboardCheck },
   { to: "/maintenance-overview", label: "Checklist Overview", icon: BarChart3 },
 ];
 
+// IT Manager-only: pause/resume the monitoring agent, fleet-wide or per lab.
+const IT_MANAGER_NAV_ITEM = {
+  to: "/agent-control",
+  label: "Agent Control",
+  icon: ShieldCheck,
+};
+
 export default function Sidebar({ open, onClose }) {
   const { user } = useAuth();
+  const navItems =
+    user?.role === "it-manager" ? [...BASE_NAV_ITEMS, IT_MANAGER_NAV_ITEM] : BASE_NAV_ITEMS;
 
   useEffect(() => {
     if (!open) return;
@@ -48,7 +57,7 @@ export default function Sidebar({ open, onClose }) {
         </div>
 
         <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-          {NAV_ITEMS.map(({ to, label, icon: Icon, end }) => (
+          {navItems.map(({ to, label, icon: Icon, end }) => (
             <NavLink
               key={to}
               to={to}

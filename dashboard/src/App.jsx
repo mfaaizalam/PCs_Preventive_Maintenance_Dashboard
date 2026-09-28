@@ -8,6 +8,7 @@ import PCDetails from "./pages/PCDetails";
 import Maintenance from "./pages/Maintenance";
 import MaintenanceDetail from "./pages/MaintenanceDetail";
 import ChecklistOverview from "./pages/ChecklistOverview";
+import AgentControl from "./pages/AgentControl";
 import NotFound from "./pages/NotFound";
 import { DashboardSocketProvider } from "./context/DashboardSocketContext";
 
@@ -30,6 +31,7 @@ export default function App() {
             <Route path="/maintenance" element={<Maintenance />} />
             <Route path="/maintenance/:computerId" element={<MaintenanceDetail />} />
             <Route path="/maintenance-overview" element={<ChecklistOverview />} />
+            <Route path="/agent-control" element={<AgentControl />} />
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>

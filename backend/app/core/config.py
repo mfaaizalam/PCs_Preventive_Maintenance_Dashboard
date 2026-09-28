@@ -1,3 +1,6 @@
+from typing import List
+
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -36,7 +39,7 @@ class Settings(BaseSettings):
     # How often the retention sweep runs. Once an hour is plenty -
     # this is cleanup, not anything time-critical.
     RETENTION_SWEEP_INTERVAL_SECONDS: int = 3600
-    
+
         # How many days before a half-year purge do we start showing the
     # "data about to be deleted" reminder banner on the dashboard.
     MAINTENANCE_LOG_REMINDER_DAYS: int = 2
@@ -49,6 +52,31 @@ class Settings(BaseSettings):
     # Gives a person sitting at that PC a chance to see the Windows
     # warning and save their work, or an admin a window to cancel.
     SHUTDOWN_GRACE_SECONDS: int = 60
+
+    # ------------------------------------------------------------------
+    # ADDED: CORS - only needed if the dashboard (frontend) is served
+    # from a different origin than this API (e.g. frontend on
+    # http://192.168.1.50:4173 calling the API on
+    # http://192.168.1.50:8000 - different port = different origin).
+    #
+    # Leave this EMPTY (the default) if you put a reverse proxy or
+    # this same FastAPI app in front of both, so the browser only ever
+    # talks to one origin - that setup needs no CORS at all and is
+    # unaffected by this change.
+    #
+    # Set it in backend/.env, comma-separated, e.g.:
+    #   ALLOWED_ORIGINS=http://192.168.1.50:4173,http://192.168.1.51:4173
+    # or, for a trusted LAN where any PC's browser may call this API:
+    #   ALLOWED_ORIGINS=*
+    # ------------------------------------------------------------------
+    ALLOWED_ORIGINS: List[str] = []
+
+    @field_validator("ALLOWED_ORIGINS", mode="before")
+    @classmethod
+    def _split_allowed_origins(cls, value):
+        if isinstance(value, str):
+            return [origin.strip() for origin in value.split(",") if origin.strip()]
+        return value
 
     model_config = SettingsConfigDict(
         env_file=".env",
